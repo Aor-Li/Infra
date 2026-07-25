@@ -12,6 +12,11 @@
             cleanup = "zap";
           };
         };
+
+        darwin.networking = {
+          computerName = host.hostName;
+          localHostName = host.hostName;
+        };
       };
     };
 

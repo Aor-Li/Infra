@@ -5,7 +5,6 @@
     {
       includes = [
         den.aspects.system.core
-        den.aspects.system.hostname
         den.aspects.system.i18n
         den.aspects.system.tools
         den.aspects.system.sleep
