@@ -2,6 +2,8 @@
 {
   den.aspects.dev.shell = {
     includes = [
+      den.aspects.dev.shell.ghostty
+      den.aspects.dev.shell.herdr
       den.aspects.dev.shell.starship
       den.aspects.dev.shell.tmux
     ];
