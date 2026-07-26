@@ -7,19 +7,21 @@
 
   den.aspects.desktop.session.compositor.niri =
     { host, ... }:
+    let
+      enable = (host.graphical or false) && ((host.distro or "nixos") != "darwin");
+    in
     {
-      nixos = lib.mkIf (host.graphical or false) {
+      nixos = lib.mkIf enable {
         programs.niri.enable = true;
       };
 
-      homeManager = lib.mkIf (host.graphical or false) {
-        imports = [
-          inputs.niri.homeModules.niri
-        ];
-          
-        programs.niri = lib.mkIf (host.distro != "darwin") {
-          enable = true;
-        }
-      };
+      # imports 不能被 mkIf 包裹（module 系统展开 imports 早于求值 config）。
+      # 且 programs.niri 这个 option 只有在上游模块被 import 后才存在，
+      # 故连配置一起放进 optionals——mkIf false 不足以避开 option 存在性检查。
+      # 与 desktop/shell/quickshell/dank 的写法一致。
+      homeManager.imports = lib.optionals enable [
+        inputs.niri.homeModules.niri
+        { programs.niri.enable = true; }
+      ];
     };
 }

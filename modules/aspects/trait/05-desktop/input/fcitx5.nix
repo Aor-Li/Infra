@@ -1,6 +1,6 @@
 { ... }:
 {
-  den.aspects.desktop.fcitx5 =
+  den.aspects.desktop.input.fcitx5 =
     { host, ... }:
     {
       nixos =

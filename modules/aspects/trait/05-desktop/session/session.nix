@@ -1,3 +1,4 @@
+{ den, ... }:
 {
   den.aspects.desktop.session.includes = [
     den.aspects.desktop.session.compositor

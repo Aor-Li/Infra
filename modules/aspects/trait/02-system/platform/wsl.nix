@@ -5,7 +5,7 @@
     nixos-wsl.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  den.aspects.system.core.wsl =
+  den.aspects.system.platform.wsl =
     { host, ... }:
     {
       nixos = {
@@ -19,6 +19,4 @@
         };
       };
     };
-
-  den.aspects.system.core.includes = [ den.aspects.system.core.wsl ];
 }

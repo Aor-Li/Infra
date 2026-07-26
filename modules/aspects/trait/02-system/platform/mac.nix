@@ -1,6 +1,6 @@
 { den, lib, ... }:
 {
-  den.aspects.system.core.mac =
+  den.aspects.system.platform.mac =
     { host, ... }:
     {
       darwin = {
@@ -13,12 +13,10 @@
           };
         };
 
-        darwin.networking = {
+        networking = {
           computerName = host.hostName;
           localHostName = host.hostName;
         };
       };
     };
-
-  den.aspects.system.core.includes = [ den.aspects.system.core.mac ];
 }

@@ -4,7 +4,7 @@
   den.aspects.system.boot =
     { host, ... }:
     {
-      nixos = lib.mkIf host.type != "wsl" {
+      nixos = lib.mkIf (host.env != "wsl") {
         boot.loader.systemd-boot.enable = true;
         boot.loader.efi.canTouchEfiVariables = true;
       };

@@ -1,6 +1,6 @@
 { ... }:
 {
-  den.aspects.dev.git =
+  den.aspects.dev.vcs.git =
     { home, ... }:
     {
       nixos =
