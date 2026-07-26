@@ -1,0 +1,3 @@
+{
+  den.aspects.system.hardware = {};
+}
