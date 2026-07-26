@@ -14,8 +14,6 @@
       homeManager =
         { config, lib, ... }:
         let
-          # 仓库根路径。源仓库写死为 /home/aor/infra（留有兼容 TODO），
-          # 这里从 home 目录推导，与 feature/nix/nh.nix 的约定一致。
           root = "${config.home.homeDirectory}/Den-Infra";
 
           dankModule = {
@@ -43,7 +41,8 @@
             };
 
             # 将 dms 目录添加到 $HOME/.config/niri 下，从而能够被 include
-            xdg.configFile."niri/dms".source = config.lib.file.mkOutOfStoreSymlink "${root}/modules/aspects/feature/desktop/shell/quickshell/dank/dms";
+            # 注意：路径写死，移动本目录时必须同步改这里。
+            xdg.configFile."niri/dms".source = config.lib.file.mkOutOfStoreSymlink "${root}/modules/aspects/trait/05-desktop/shell/quickshell/dank/dms";
           };
         in
         {
