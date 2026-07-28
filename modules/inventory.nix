@@ -54,8 +54,8 @@
   };
   den.homes.aarch64-darwin."aor@Kumeyuri" = {
     name = "aor@Kumeyuri";
-    fullname = "Aor-Li";
-    email = "liyifeng0039@gmail.com";
+    fullname = "aor";
+    email = "liyifeng@philoai.com";
   };
 
   # mini-pc
