@@ -45,15 +45,14 @@
     email = "liyifeng0039@gmail.com";
   };
 
-  # wsl
-  den.hosts.x86_64-linux.Kumeyuri = {
-    env = "wsl";
-    role = "desktop";
-    distro = "nixos";
-    graphical = true;
+  # macbook air
+  den.hosts.aarch64-darwin.Kumeyuri = {
+    env = "physical";
+    role = "laptop";
+    distro = "darwin";
     users.aor = { };
   };
-  den.homes.x86_64-linux."aor@Kumeyuri" = {
+  den.homes.aarch64-darwin."aor@Kumeyuri" = {
     name = "aor@Kumeyuri";
     fullname = "Aor-Li";
     email = "liyifeng0039@gmail.com";
