@@ -1,4 +1,9 @@
+# macbook pro
 { den, ... }:
 {
-  den.aspects.Magatsumi = {};
+  den.aspects.Magatsumi = {
+    includes = [
+      den.aspects.application
+    ];
+  };
 }

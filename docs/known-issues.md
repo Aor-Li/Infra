@@ -60,7 +60,23 @@ home.host.graphical = true    home.host.role = desktop
 
 需进一步查 den 内部实现或向上游确认后再动手。
 
-### 2. `dank-material-shell.nix` 缺少 `niri.nix` 里那套 `key`，home 一旦出现差异即求值失败
+---
+
+#### 追加调查（2026-07-28）—— 状态：**暂缓处理**
+
+对 den 源码（`nix/lib/entities/home.nix`、`nix/lib/aspects/fx/`）和官方文档（den.denful.dev）做了进一步核实，并在本仓库用探针 aspect 重新实测，结论如下：
+
+- **这不是配置姿势问题，是 den 当前锁定版本（`99cc0c5a1cc846cb1be681344b10d2731d430e13`）resolver 的真实缺陷**，上游已有人报告为 [den#635](https://github.com/vic/den/issues/635)（"multiple standalone user@host homes sharing a user aspect resolve host-keyed config against the first home only"），但报告者次日自行留言称"filed by an inadequately constrained AI agent, please disregard"，维护者未验证真伪即关闭为 not planned。本仓库的独立复现（见下）证实该 bug **确实存在**，且命中当前实际生效的路径——`scripts/bootstrap.sh` 明确让 home-manager 始终走 standalone（不作为 nixos/darwin 模块运行）。
+- **精确根因**：不是"同一 system 下的 home 全部错误共享第一个 host"，而是**多个 home 共享同一个 den 用户名（`userName`，即 home 名字 `@` 前面那段）时发生身份碰撞**，resolver 只保留其中一个的 host 绑定。实测对照：`zzz1@Enten` / `zzz2@Tobimune`（用户名不同、各自独立 aspect）host 绑定完全正确；而只要用户名相同（如仓库里全部 6 个 home 都叫 `aor`），無论是共享同一个 aspect、还是给每个 home 单独覆盖 `.aspect` 选项，一律错误共享第一个 home 的 host 绑定。这一发现比原 issue 更精确，尚未反馈回上游。
+- **已确认无效的路径**：`provides.<hostName>`、`policy.when` 门控、参数化 include 门控、per-home `.aspect` 覆盖——只要用户名共享，全部失败。
+- **已确认不受影响的路径**：declared-host 模式（`den.hosts.<system>.<Host>.users.aor` + host 层 `provides`），因为每台机器是完全独立的顶层 `nixosConfigurations` 求值，不存在跨 home 的身份碰撞。但切换到这条路径意味着 home-manager 不再能独立于 `nixos-rebuild`/`darwin-rebuild` 单独构建，与 `bootstrap.sh` 当前"standalone 优先、可单独 switch home"的设计取向冲突。
+
+**决定（2026-07-28）：暂缓处理。** 不采用"给每个 home 起不同 den 用户名再手工覆盖 `home.username`"这类绕过身份系统的写法（不是 den 的设计意图，只是绕开 bug 的手工拼接）；也暂不切换到 declared-host 模式（改动面大、放弃 standalone 独立构建的好处）。现状维持"六个 home 配置恰好相同"，**不得改变**（改动任何一台机器的 host 差异化设置或 home 的 `homeManager` 层门控内容，都会因为这个 bug 静默配错或直接构建失败——继续保持现状是安全的，动了就会暴露问题）。后续如需处理，优先级见下：
+
+1. 把上面这条更精确的复现补充/重新提交到 den#635，请求重新打开。
+2. 若上游长期不修，再评估是否值得为桌面差异化切到 declared-host 模式。
+
+### 2. `dank-material-shell.nix` 缺少 `niri.nix` 里那套 `key`，home 一旦出现差异即求值失败 —— 状态：**暂缓处理，与问题1同源**
 
 把 `aor@philo` 的 `fullname` / `email` 改成与其他 home 不同的值后，`aor@philo` 直接构建失败（Enten / Kumeyuri 仍正常）：
 
@@ -72,7 +88,13 @@ error: The option `programs.dank-material-shell.systemd.enable' in
 `trait/05-desktop/session/compositor/niri.nix:22-25` 的注释已经准确预言了这个失败模式（「只在某个 home 的配置与其他 home 产生差异时才暴露」），并用显式 `key` 绕开了；
 `trait/05-desktop/shell/quickshell/dank/dank-material-shell.nix:49-53` 的三个 `imports` 没有补同样的 `key`。
 
-**这一条可以立刻单独修掉**，照抄 `niri.nix` 的 `key` 写法即可。
+**追加调查（2026-07-28）—— 与问题1同源，非独立 bug**：
+
+`niri.nix` 的注释已经点破了机制——「aspect 带 `host` 上下文时会在多个 scope 上扇出，同一个上游模块会被 import 多次」。这个"扇出"正是问题1根因（6 个 home 共享同一 den 用户名 `aor`，resolver 把它们当同一身份，aspect 只实例化一次）的直接后果：本应各自独立的 home 复用了同一个匿名 `imports` 模块对象，module 系统靠 `key` 去重，缺了它、且几个 home 配置出现差异时就报 `already declared`。
+
+`niri.nix` 手工补的 `key = "den:niri-home-module"` / `key = "den:niri-enable"` 只是**消除了崩溃症状**，并不修复扇出本身——补 key 之后 `aor@philo` 依然会静默拿到别人（如 Enten）的 `host` 绑定，只是不再因选项冲突报错，行为会退化成问题1描述的"静默配错"而非"构建失败"。
+
+**决定：暂缓处理，与问题1一并处理。** 单独给 `dank-material-shell.nix` 补 `key` 只是照抄姑息写法，不解决根因，且会把"构建失败"这个尚可见的报错信号也消掉，掩盖问题1。在问题1的路由方式确认之前，不单独修这一条。
 
 ---
 
@@ -182,8 +204,7 @@ den 的 home 实体有 `config.name = lib.mkForce userName`（den 源码 `nix/li
 
 ## 建议的处理顺序
 
-1. **问题 2** —— 真缺陷，可立刻单独修（照抄 `niri.nix` 的 `key` 写法），风险最低收益最直接。
-2. **问题 3 / 4 / 6** —— 纯删／纯补的死配置清理，无行为变更风险。
-3. **问题 5** —— 建议连同 `modules/meta/lib/` 一起解决（一个 `flakeRoot` + 相对路径 helper）。
-4. **问题 7 / 8 / 9 / 10 / 11** —— 文档与一致性清理，可批量做；顺手把 deadnix 加进工具集。
-5. **问题 1** —— 需先弄清 den 里 home scope 的正确写法（三种候选写法均已证伪），**确认后再动**。
+1. **问题 3 / 4 / 6** —— 纯删／纯补的死配置清理，无行为变更风险。
+2. **问题 5** —— 建议连同 `modules/meta/lib/` 一起解决（一个 `flakeRoot` + 相对路径 helper）。
+3. **问题 7 / 8 / 9 / 10 / 11** —— 文档与一致性清理，可批量做；顺手把 deadnix 加进工具集。
+4. **问题 1 / 2** —— 同源，暂缓处理。需先弄清 den 里 home scope 的正确写法（三种候选写法均已证伪），**确认后一并处理**；在此之前不单独给问题2打 `key` 补丁，避免掩盖问题1的报错信号。

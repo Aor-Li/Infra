@@ -1,3 +1,4 @@
+# mini-pc
 { den, ... }:
 {
   den.aspects.Tobimune = {

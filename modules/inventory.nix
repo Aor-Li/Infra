@@ -7,9 +7,7 @@
   # main nixos pc
   den.hosts.x86_64-linux.Enten = {
     env = "physical";
-    role = "desktop";
     distro = "nixos";
-    graphical = true;
     users.aor = { };
   };
   den.homes.x86_64-linux."aor@Enten" = {
@@ -21,7 +19,6 @@
   # macbook pro
   den.hosts.aarch64-darwin.Magatsumi = {
     env = "physical";
-    role = "laptop";
     distro = "darwin";
     users.aor = { };
   };
@@ -31,24 +28,9 @@
     email = "liyifeng0039@gmail.com";
   };
 
-  # mackbook pro - nixos vm
-  den.hosts.aarch64-linux.Kuregumo = {
-    env = "virtual";
-    role = "laptop";
-    distro = "nixos";
-    graphical = true;
-    users.aor = { };
-  };
-  den.homes.aarch64-linux."aor@Kuregumo" = {
-    name = "aor@Kuregumo";
-    fullname = "Aor-Li";
-    email = "liyifeng0039@gmail.com";
-  };
-
   # macbook air
   den.hosts.aarch64-darwin.Kumeyuri = {
     env = "physical";
-    role = "laptop";
     distro = "darwin";
     users.aor = { };
   };
@@ -58,12 +40,22 @@
     email = "liyifeng@philoai.com";
   };
 
+  # macbook nixos vm with desktop
+  den.hosts.aarch64-linux.Kuregumo = {
+    env = "virtual";
+    distro = "nixos";
+    users.aor = { };
+  };
+  den.homes.aarch64-linux."aor@Kuregumo" = {
+    name = "aor@Kuregumo";
+    fullname = "Aor-Li";
+    email = "liyifeng0039@gmail.com";
+  };
+
   # mini-pc
   den.hosts.x86_64-linux.Tobimune = {
     env = "physical";
-    role = "server";
     distro = "nixos";
-    graphical = true;
     users.aor = { };
   };
   den.homes.x86_64-linux."aor@Tobimune" = {
