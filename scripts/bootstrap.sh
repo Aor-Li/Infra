@@ -25,7 +25,7 @@ name="$1"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 flake="${repo_root}#${name}"
 
-# Inject the same nix.conf settings modules/aspects/trait/01-nix/settings.nix
+# Inject the same nix.conf settings modules/aspects/trait/01-nix/conf.nix
 # would apply, since a fresh machine hasn't switched once yet to have them.
 export NIX_CONFIG="experimental-features = nix-command flakes
 substituters = https://mirror.sjtu.edu.cn/nix-channels/store https://mirrors.ustc.edu.cn/nix-channels/store https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store https://nix-community.cachix.org https://cache.nixos.org/

@@ -1,14 +1,10 @@
 { ... }:
 {
-  den.aspects.app.imagemagick =
-    { host, ... }:
+  den.aspects.app.imagemagick.homeManager =
+    { pkgs, ... }:
     {
-      homeManager =
-        { lib, pkgs, ... }:
-        lib.mkIf (host.graphical or false) {
-          home.packages = with pkgs; [
-            imagemagick
-          ];
-        };
+      home.packages = with pkgs; [
+        imagemagick
+      ];
     };
 }

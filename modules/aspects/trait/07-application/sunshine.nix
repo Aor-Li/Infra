@@ -1,14 +1,6 @@
 { ... }:
 {
-  den.aspects.app.sunshine =
-    { host, ... }:
-    {
-      nixos =
-        { lib, ... }:
-        lib.mkIf (host.graphical or false) {
-          services.sunshine = {
-            enable = true;
-          };
-        };
-    };
+  den.aspects.app.sunshine.nixos = {
+    services.sunshine.enable = true;
+  };
 }

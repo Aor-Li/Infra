@@ -29,7 +29,9 @@ let
   };
 in
 {
-  den.aspects.nix.settings = {
+  # 不叫 `settings`：这个键被 den 保留给「aspect 自带的配置项」了，
+  # 见 modules/meta/schema/conf.nix。名字取自它实际写出的 /etc/nix/nix.conf。
+  den.aspects.nix.conf = {
     nixos = lib.recursiveUpdate common {
       nix.settings.trusted-users = [ "@wheel" ];
       nixpkgs.config.allowUnfree = true;
