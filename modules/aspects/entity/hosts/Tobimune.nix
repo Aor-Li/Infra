@@ -14,5 +14,8 @@
         fsType = "vfat";
       };
     };
+
   };
+
+  den.hosts.x86_64-linux.Tobimune.settings.system.power.sleep.neverSleep = true;
 }

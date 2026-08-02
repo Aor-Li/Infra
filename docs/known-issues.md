@@ -36,7 +36,7 @@ home.host.graphical = true    home.host.role = desktop
 
 即 `aor@Tobimune` 看到的是 **Enten** 的 host 实体；连 inventory 里根本没有对应 host 的 `aor@philo` 也拿到了 Enten。
 
-**后果**——凡是在 **homeManager class** 里读上下文做门控的，判断依据都是错的：
+**后果**——凡是在 **homeManager class** 里读上下文做门控的，判断依据都是错的（下表为审计当时的状态；`graphical` 已于 2026-08-02 移除，见文末追加）：
 
 | 位置 | 读取的上下文 |
 | --- | --- |
@@ -75,6 +75,25 @@ home.host.graphical = true    home.host.role = desktop
 
 1. 把上面这条更精确的复现补充/重新提交到 den#635，请求重新打开。
 2. 若上游长期不修，再评估是否值得为桌面差异化切到 declared-host 模式。
+
+#### 追加记录（2026-08-02）—— 上面那条「不得改变」的约束**已经破了**
+
+`host.graphical` 这个 flag 连同它在 5 个 aspect 里的门控被整体移除，门控职责下放给 `includes`（哪台机器 include `desktop` / `app`）。这个改动本身对 nixos class 是干净的——Enten / Kuregumo 拿到 niri + sunshine + fcitx5，Tobimune（没 include `desktop` / `app`）一个都没拿到。
+
+但它把问题 1 从潜伏状态推了出来：`graphical or false` 恒假时六个 home 恰好一模一样，这个巧合正是上面「维持现状是安全的」的全部依据；一旦门控消失，`den.aspects.app` 的 homeManager 层（obsidian / imagemagick）立刻显出错误路由。
+
+实测，两台 aarch64-darwin host 都 `include` 了 `den.aspects.app`，但只有一个 home 收到：
+
+```
+aor@Magatsumi   programs.obsidian.enable = true    drv 变了
+aor@Kumeyuri    programs.obsidian.enable = false   drv 与移除前逐字节相同
+```
+
+`aor@Magatsumi` 是本仓库第一个不再与同 system 其他 home 共享 derivation 的 home。**这不是新 bug，是问题 1 的直接显形**，无法在不重新引入门控的前提下消除。
+
+**决定：接受并记录，不回退。** 后续给 home 侧做任何差异化之前，都必须先解决问题 1；在那之前，凡是挂在 `homeManager` class 上的 aspect 都要默认「落到哪个 home 是不确定的」。
+
+顺带：`den.aspects.desktop` 的 homeManager 层（niri、dank-material-shell）当前**根本没到达任何 home**——六个 home 的 `programs.niri` / `programs.dank-material-shell` 全部不存在，移除门控前后都是如此。也就是说 home 侧桌面栈整体是死的，问题 2 的 `already declared` 目前无从触发。
 
 ### 2. `dank-material-shell.nix` 缺少 `niri.nix` 里那套 `key`，home 一旦出现差异即求值失败 —— 状态：**暂缓处理，与问题1同源**
 
@@ -116,6 +135,8 @@ imagemagick ∈ home.packages   = false
 ```
 
 `den.aspects.service` 同样悬空（且本身是空壳，见问题 8）。
+
+**更新（2026-08-02）—— `app` 这半条已解决。** `entity/hosts/` 下的 Enten / Kuregumo / Kumeyuri / Magatsumi 四个文件现在都显式 `include` 了 `den.aspects.app`，去掉 `graphical` 门控后实测 `services.sunshine.enable = true`（Enten / Kuregumo）、`programs.obsidian.enable = true`（`aor@Magatsumi`，路由错误见问题 1）。`den.aspects.service` 仍然悬空。
 
 ### 4. `inventory.nix` 里 6 处 `name = "aor@Xxx"` 是死配置
 
@@ -193,10 +214,12 @@ den 的 home 实体有 `config.name = lib.mkForce userName`（den 源码 `nix/li
 
 可能是有意的，但这两个 flag 恰好就是问题 1 会放大的那两个。
 
+**更新（2026-08-02）—— 已解决。** `graphical` 已从 host schema 和全部 aspect 中移除，桌面栈改由 `includes` 决定：Kumeyuri 只 include `app`，Tobimune 两个都不 include，实测两台都不再拿到 niri / fcitx5 / DMS。
+
 ### 13. 零散小问题
 
 - `trait/02-system/tools.nix:18` `environment.variables.EDITOR = "nvim"`，而 lazyvim 把 `nvim` alias 成 `nvim-lazy`——EDITOR 实际指向没有配置的 plain nvim
-- `trait/01-nix/settings.nix:31` darwin 的 `trusted-users` 里有 `@wheel`，darwin 上没这个组
+- `trait/01-nix/conf.nix`（审计时名为 `settings.nix`）darwin 的 `trusted-users` 里有 `@wheel`，darwin 上没这个组
 - `trait/06-develope/ai/ai.nix:8-14` 用 `os` class 加 numtide substituter，但 claude-code 是 `home.packages` 装的；由于 `meta/schema/user.nix` 设了 `den.schema.user.classes = [ ]`，HM 只走 standalone 路径，**拿不到**这个 cache
 - secrets 的 `hosts/` 与 `users/` 目录尚不存在，`.sops.yaml` 与 tailscale 都还是 TODO 状态（已有注释说明，属已知）
 

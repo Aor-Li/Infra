@@ -1,14 +1,21 @@
 # 关掉它：机器按平台默认策略自动休眠，无人值守的 server 会睡死、远程连接断开。
 { lib, ... }:
 {
-  den.aspects.system.power.sleep =
-    { host, ... }:
-    let
-      # 只有 server 需要彻底不睡；desktop / laptop 保留各自平台的默认行为。
-      neverSleep = host.role == "server";
-    in
-    {
-      nixos = lib.mkIf neverSleep {
+  den.aspects.system.power.sleep = {
+
+    settings = {
+      neverSleep = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          彻底禁止这台机器休眠。默认关闭：desktop / laptop 保留各自平台的默认行为，只有无人值守的 server 需要打开。
+        '';
+      };
+    };
+
+    nixos =
+      { settings, ... }:
+      lib.mkIf settings.system.power.sleep.neverSleep {
         # 禁掉四个 target 之后，任何组件都无法再发起休眠。
         systemd.targets = {
           sleep.enable = false;
@@ -27,9 +34,11 @@
         };
       };
 
-      # darwin 没有 systemd/logind，等价能力全在 systemsetup 一层：三档 idle sleep
-      # 对应上面的 systemd.targets，allowSleepByPowerButton 对应 HandlePowerKey。
-      darwin = lib.mkIf neverSleep {
+    # darwin 没有 systemd/logind，等价能力全在 systemsetup 一层：三档 idle sleep
+    # 对应上面的 systemd.targets，allowSleepByPowerButton 对应 HandlePowerKey。
+    darwin =
+      { settings, ... }:
+      lib.mkIf settings.system.power.sleep.neverSleep {
         power.sleep = {
           computer = "never";
           display = "never";
@@ -37,5 +46,5 @@
           allowSleepByPowerButton = false;
         };
       };
-    };
+  };
 }

@@ -8,9 +8,12 @@
 ```
 modules/
 ├── flakes/        flake 自身：外部 input 与顶层 flakeModule
-├── schema/        den 的 schema：host / user / home 的选项定义
+├── meta/          框架层：den 自己的形状
+│   ├── schema/        实体的选项定义（conf 全局 / host / user / home）
+│   └── _aspect-settings/  见 6.1，由 schema/conf.nix 显式 import
 ├── inventory.nix  设备清单：声明所有 host / user / home
 └── aspects/
+    ├── default/   基线：所有实体都吃到的 den.default
     ├── entity/    谁：hosts/ 与 users/，只声明身份 + include 哪些 trait
     └── trait/     配什么：唯一定义能力的地方
 ```
@@ -55,7 +58,7 @@ modules/
 trait/
 ├── nix/                    问：nix 工具链的哪一部分？
 │   ├── nix.nix                 汇总
-│   ├── settings.nix            substituters / features / gc / optimise
+│   ├── conf.nix                substituters / features / gc / optimise
 │   ├── home-manager.nix        集成方式
 │   ├── nix-ld.nix
 │   └── tool/                   nh / nix-index / nix-output-monitor
@@ -95,7 +98,7 @@ trait/
 │   ├── shell/                  交互环境：拿到提示符之后改变你敲命令方式的东西
 │   │   ├── shell.nix               bash/fish/zsh 本体、通用别名、会话变量
 │   │   ├── prompt/                 starship
-│   │   ├── terminal/               ghostty / wezterm（自带 graphical 门控）
+│   │   ├── terminal/               ghostty / wezterm
 │   │   ├── multiplexer/            tmux / zellij / herdr
 │   │   └── util/                   带 shell 集成的 CLI：zoxide / atuin / fzf / eza / yazi
 │   ├── editor/                 写代码的地方（EDITOR/VISUAL 在 editor.nix 统一定义）
@@ -248,8 +251,62 @@ allowAiAgents = lib.mkDefault (config.ownership == "personal");
 ```
 
 trait 里写 `lib.mkIf host.useProxy`，不写 `mkIf (host.ownership == "company")`。
-每一条都能被单台机器单独推翻，而不破坏整个抽象。现有的 `graphical` 就是正确
-形态——它是具体开关，不是"这是台桌面机"这种笼统判断。
+每一条都能被单台机器单独推翻，而不破坏整个抽象。
+
+曾经的 `graphical` 是个反例：它铺在 5 个 trait 里当门控，却又只是"这是台桌面机"
+的同义反复，最终被整体移除——桌面栈现在纯靠 entity 的 `includes` 决定（哪台机器
+include `desktop` / `app`）。真正需要细粒度开关时用下面的 `settings`。
+
+### 6.1 aspect 自带的选项：`settings`
+
+上面那条只适用于**真正跨 trait 的笼统属性**（`role` / `distro` / `virt`）。一个
+只有单个 trait 关心的开关不该往 host schema 上堆——它属于那个 trait 自己。
+
+机制（实现见 `meta/_aspect-settings/`）：aspect 用 `settings` 声明 `mkOption`，
+schema 把整棵 aspect 树按**同样的路径**镜像成一个强类型的 `settings` 选项，实体
+填值，aspect 再从注入的 `settings` 参数读回来。
+
+整个特性——保留字、声明侧的 schema 选项、消费侧的 policy 注入——都收在那一个
+目录里，`meta/schema/conf.nix` 只用一行 import 引它。
+
+```nix
+# trait 侧：声明 + 消费都在自己文件里
+den.aspects.system.power.sleep = {
+  settings.neverSleep = lib.mkOption { type = lib.types.bool; default = false; };
+  nixos = { settings, ... }: lib.mkIf settings.system.power.sleep.neverSleep { … };
+};
+
+# inventory 侧：个体差异
+den.hosts.x86_64-linux.Tobimune.settings.system.power.sleep.neverSleep = true;
+```
+
+四条硬规则：
+
+- **`settings` 是保留字，不能再有 aspect 叫这个名字。**（`nix.settings` 因此
+  改名成 `nix.conf`。）撞名的症状是配置被静默 include 两次。
+- **aspect 上的 `settings` 只是声明槽，填值一律走实体路径。** 把值直接写在
+  aspect 上（`den.aspects.Tobimune.settings.… = true`）看起来很自然，但那棵镜像
+  子树没有任何消费者，惰性求值永远不触发——不报错也不生效。
+  `meta/_aspect-settings/lint.nix` 会在求值期把这种写法拦下来，并列出出错路径。
+- **不给 `default` = 必填。** 装了这个 aspect 却没给值，直接求值失败——磁盘 ID、
+  AS 号这类"必须由机器告诉我"的事实就该这样。有合理全局值的一律给 `default`。
+- **`settings` 只能声明在静态 attrset 形态的 aspect 上。** 写成
+  `den.aspects.x = { host, ... }: { … }` 的参数化 aspect，生成器看不进函数体。
+  需要 `host` 就在 class 那一层要：`nixos = { host, settings, ... }: …`。
+
+取值来源按**谁产出这份配置**决定，不做级联：
+
+| pipeline | 读谁 |
+| --- | --- |
+| `nixosConfigurations` / `darwinConfigurations` | `host.settings` |
+| `homeConfigurations` | `home.settings` |
+
+所以系统层和 home 层都要用的开关，两边各写一次。这是刻意的——den 不会把 host
+的值传给 standalone home，硬造一层级联只会让"这个值到底从哪来"变得不可查。
+
+> home 侧受 [known-issues 问题 1](../docs/known-issues.md) 影响：同一 system 下
+> 共用 den 用户名的多个 home 会串味。在那个 bug 修掉之前，`home.settings` 只能
+> 全部写成一样的值，差异化开关一律走 host 侧。
 
 **工作/个人的边界**（尚未落地，先记判据）：
 
@@ -264,8 +321,10 @@ trait 里写 `lib.mkIf host.useProxy`，不写 `mkIf (host.ownership == "company
 
 - 目录 `X/` 的汇总点固定是 `X/X.nix`，**只写 `includes` 和该层所有子节点共享的
   配置**，不装单个程序的包。
-- `_name/` 前缀表示**非 nix 载荷**（`_lazyvim/`、dank 的 `*.kdl`），与消费它的
-  trait 同目录；import-tree 默认跳过下划线开头的路径。
+- `_name/` 前缀表示**不参与 import-tree 自动导入**，两种用途，都与消费它的模块
+  同目录：非 nix 载荷（`_lazyvim/`、dank 的 `*.kdl`），以及需要被显式 `import`
+  的 nix 模块（`meta/_aspect-settings/`）。后者用于把一个自足的特性收成一个目录，
+  让引用它的文件保持一行。
 - **预留槽位**（`terminal/` `prompt/` `multiplexer/` `vpn/` `browser/`）即使只有
   一个文件也建目录——它们是 API 的一部分，加第二个成员时零改动。
   **松散分组**才适用"攒够 3 个再拆目录"。
