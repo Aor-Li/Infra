@@ -209,7 +209,7 @@ rust-analyzer 和 gitlens。不要为了分类纯洁性切成四份塞进 lang/v
 | 想建的 | 正确位置 |
 |---|---|
 | `theme/` `catppuccin/` | `home.theme` 选项，各程序自己读 |
-| `darwin/` `wsl/` 作为顶层 | trait 内的 class + `host.distro` / `host.env` 门控 |
+| `darwin/` `wsl/` 作为顶层 | trait 内的 class + `host.distro` / `host.virt` 门控 |
 | `server-tools/` `laptop/` | entity 里显式 include |
 | `home/` 与 `system/` 两棵平行树 | 同一 trait 内的 `homeManager` / `nixos` class |
 | `work/` `personal/` | `host.ownership` 派生的具体开关 + 目录级隔离（见 6） |

@@ -6,8 +6,9 @@
 
   # main nixos pc
   den.hosts.x86_64-linux.Enten = {
-    env = "physical";
+    virt = "none";
     distro = "nixos";
+    role = "desktop";
     users.aor = { };
   };
   den.homes.x86_64-linux."aor@Enten" = {
@@ -18,8 +19,9 @@
 
   # macbook pro
   den.hosts.aarch64-darwin.Magatsumi = {
-    env = "physical";
+    virt = "none";
     distro = "darwin";
+    role = "laptop";
     users.aor = { };
   };
   den.homes.aarch64-darwin."aor@Magatsumi" = {
@@ -30,8 +32,9 @@
 
   # macbook air
   den.hosts.aarch64-darwin.Kumeyuri = {
-    env = "physical";
+    virt = "none";
     distro = "darwin";
+    role = "laptop";
     users.aor = { };
   };
   den.homes.aarch64-darwin."aor@Kumeyuri" = {
@@ -42,8 +45,9 @@
 
   # macbook nixos vm with desktop
   den.hosts.aarch64-linux.Kuregumo = {
-    env = "virtual";
+    virt = "vm";
     distro = "nixos";
+    role = "laptop";
     users.aor = { };
   };
   den.homes.aarch64-linux."aor@Kuregumo" = {
@@ -54,8 +58,9 @@
 
   # mini-pc
   den.hosts.x86_64-linux.Tobimune = {
-    env = "physical";
+    virt = "none";
     distro = "nixos";
+    role = "server";
     users.aor = { };
   };
   den.homes.x86_64-linux."aor@Tobimune" = {

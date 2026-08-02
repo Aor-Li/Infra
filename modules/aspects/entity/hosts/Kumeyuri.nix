@@ -3,7 +3,7 @@
 {
   den.aspects.Kumeyuri = {
     includes = [
-      den.aspects.application
+      den.aspects.app
     ];
   };
 }

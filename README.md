@@ -14,7 +14,7 @@
 modules/
 ├── profile.nix     # 声明所有 host / user / home（设备清单，见下表）
 ├── flakes/         # 配置 flake 本身：外部 input + 顶层 flakeModule（见该目录 README）
-├── metas/          # den 的 schema 定义（host / user 的选项，如 env / role / distro）
+├── metas/          # den 的 schema 定义（host / user 的选项，如 virt / role / distro）
 └── aspects/        # 实际配置内容
     ├── entity/     # 具体实体：各 host、user 的定义
     └── feature/    # 可复用特性：nix 设置、系统核心、按环境区分的模块等

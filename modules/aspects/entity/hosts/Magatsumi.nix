@@ -3,7 +3,7 @@
 {
   den.aspects.Magatsumi = {
     includes = [
-      den.aspects.application
+      den.aspects.app
     ];
   };
 }

@@ -4,14 +4,14 @@
     { config, ... }:
     {
       options = {
-        env = lib.mkOption {
+        virt = lib.mkOption {
           type = lib.types.enum [
-            "physical"
-            "virtual"
+            "none"
+            "vm"
             "wsl"
           ];
-          default = "physical";
-          description = "The environment in which the host device is running.";
+          default = "none";
+          description = "The virtualization technology the host runs on, named after `systemd-detect-virt` output (`none` means bare metal).";
         };
 
         distro = lib.mkOption {
@@ -21,6 +21,14 @@
           ];
           default = "nixos";
           description = "The Linux distribution running on the host device.";
+        };
+
+        role = lib.mkOption {
+          type = lib.types.enum [
+            "desktop"
+            "laptop"
+            "server"
+          ];
         };
 
       };

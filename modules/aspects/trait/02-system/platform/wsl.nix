@@ -10,7 +10,7 @@
     {
       nixos = {
         imports = [ inputs.nixos-wsl.nixosModules.wsl ];
-        wsl = lib.mkIf (host.env == "wsl" && host.distro == "nixos") {
+        wsl = lib.mkIf (host.virt == "wsl" && host.distro == "nixos") {
           enable = true;
           useWindowsDriver = true;
           startMenuLaunchers = true;

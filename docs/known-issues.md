@@ -183,12 +183,12 @@ den 的 home 实体有 `config.name = lib.mkForce userName`（den 源码 `nix/li
 
 ### 11. Kuregumo 重复了 `boot.nix` 已经做的事
 
-`trait/02-system/boot/boot.nix:8-9` 已对 `env != "wsl"` 设了 systemd-boot + `canTouchEfiVariables`，
+`trait/02-system/boot/boot.nix:8-9` 已对 `virt != "wsl"` 设了 systemd-boot + `canTouchEfiVariables`，
 `entity/hosts/Kuregumo.nix:6-7` 又设一遍，而 Enten / Tobimune 没写——三台同类主机三种写法。
 
 ### 12. inventory 里语义可疑的组合
 
-- **Kumeyuri**：`env = "wsl"` 却 `graphical = true` → 在 WSL 上开 niri / fcitx5 / DMS
+- **Kumeyuri**：`virt = "wsl"` 却 `graphical = true` → 在 WSL 上开 niri / fcitx5 / DMS
 - **Tobimune**：`role = "server"` 却 `graphical = true` → 服务器上开整套桌面栈
 
 可能是有意的，但这两个 flag 恰好就是问题 1 会放大的那两个。

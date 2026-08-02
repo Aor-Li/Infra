@@ -1,0 +1,3 @@
+{
+  den.schema.home = {};
+}
