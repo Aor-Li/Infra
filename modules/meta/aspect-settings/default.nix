@@ -7,16 +7,15 @@
 #   ② 实体填值      den.hosts.x86_64-linux.Tobimune.settings.system.power.sleep.neverSleep = true
 #   ③ aspect 消费   nixos = { settings, ... }: ... settings.system.power.sleep.neverSleep
 #
-# ② 的路径与 ① 逐段一致，因为 tree.nix 把整棵 aspect 树按同样的路径镜像成了选项树。
-# 加一个 setting 只需要改 aspect 自己，永远不用回到这个目录。
+# ② 的路径与 ① 逐段一致，因为 _lib/tree.nix 把整棵 aspect 树按同样的路径镜像成了
+# 选项树。加一个 setting 只需要改 aspect 自己，永远不用回到这个目录。
 #
 # 下面是这个特性的全部三个挂载点：保留字、声明侧（schema）、消费侧（policy）。
-# 目录带 `_` 前缀，不参与 import-tree 自动导入，由 modules/meta/schema/conf.nix
-# 显式 import。
+# 特性根目录参与 import-tree 自动导入；只有 `_lib/` 中的实现细节不参与。
 { den, lib, ... }:
 let
-  tree = import ./tree.nix { inherit den lib; };
-  assertDeclarationsOnly = import ./lint.nix { inherit den lib tree; };
+  tree = import ./_lib/tree.nix { inherit den lib; };
+  assertDeclarationsOnly = import ./_lib/lint.nix { inherit den lib tree; };
 in
 {
   den = {
