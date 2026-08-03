@@ -1,6 +1,13 @@
 { ... }:
 {
   den.aspects.dev.shell.terminal.ghostty = {
+
+    nixos = 
+      { pkgs, ... }:
+      {
+        systemPackages = [ pkgs.ghostty ];
+      };
+
     darwin = {
       homebrew.casks = [ "ghostty" ];
     };
@@ -10,11 +17,10 @@
       {
         programs.ghostty = {
           enable = true;
-          # darwin 上 pkgs.ghostty 不可用（meta.platforms 只有 linux），置空只写配置不装包，
-          # 由上面的 homebrew cask 负责安装；其他平台走 package 默认值 pkgs.ghostty。
           package = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin null;
-
           settings = {
+            theme = "Catppuccin Mocha";
+            font-family = "CaskaydiaCove Nerd Font";
             shell-integration-features = "ssh-env,ssh-terminfo";
           };
         };
