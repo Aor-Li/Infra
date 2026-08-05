@@ -3,7 +3,7 @@
   den.aspects.dev.shell.terminal.ghostty = {
 
     nixos = { pkgs, ... }: {
-      systemPackages = [ pkgs.ghostty ];
+      environment.systemPackages = [ pkgs.ghostty ];
     };
 
     darwin = {

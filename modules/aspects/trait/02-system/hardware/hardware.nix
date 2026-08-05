@@ -1,3 +1,6 @@
+{ den, ... }:
 {
-  den.aspects.system.hardware = {};
+  den.aspects.system.hardware.includes = [
+    den.aspects.system.hardware.display
+  ];
 }
