@@ -2,9 +2,9 @@
 let
   # ---- secrets 存储位置约定 ----
   #
-  # 密文（sops 加密的 yaml，可安全入库）按层级分别存放：
-  #   系统级：./hosts/<hostName>.yaml   —— 该主机自身的 secrets
-  #   用户级：./users/<userName>.yaml   —— 该用户的 secrets
+  # 密文（sops 加密的 yaml，可安全入库）与对应实体就近存放：
+  #   系统级：entity/hosts/<hostName>/secrets.yaml
+  #   用户级：entity/users/<userName>/secrets.yaml
   #
   # 解密后的明文落地位置沿用 sops-nix 默认值：
   #   系统级：/run/secrets/<name>       （tmpfs，重启即失）
@@ -16,8 +16,9 @@ let
   #
   # 密文文件尚不存在时用 pathExists 兜底不设 defaultSopsFile，
   # 避免 Nix 求值期因路径缺失而报错。
-  hostSecretsOf = name: ./hosts + "/${name}.yaml";
-  userSecretsOf = name: ./users + "/${name}.yaml";
+  entityDir = ../../../entity;
+  hostSecretsOf = name: entityDir + "/hosts/${name}/secrets.yaml";
+  userSecretsOf = name: entityDir + "/users/${name}/secrets.yaml";
 
   systemKeyFile = "/var/lib/sops-nix/key.txt";
 in
@@ -28,7 +29,7 @@ in
   };
 
   den.aspects.security.secrets = {
-    nixos =
+    os =
       {
         config,
         lib,
@@ -39,8 +40,6 @@ in
         sopsFile = hostSecretsOf config.networking.hostName;
       in
       {
-        imports = [ inputs.sops-nix.nixosModules.sops ];
-
         environment.systemPackages = with pkgs; [
           age
           sops
@@ -54,30 +53,8 @@ in
         sops.defaultSopsFile = lib.mkIf (builtins.pathExists sopsFile) sopsFile;
       };
 
-    darwin =
-      {
-        config,
-        lib,
-        pkgs,
-        ...
-      }:
-      let
-        sopsFile = hostSecretsOf config.networking.hostName;
-      in
-      {
-        imports = [ inputs.sops-nix.darwinModules.sops ];
-
-        environment.systemPackages = with pkgs; [
-          age
-          sops
-        ];
-
-        sops.age.keyFile = lib.mkDefault systemKeyFile;
-        sops.age.sshKeyPaths = lib.mkDefault [ ];
-        sops.gnupg.sshKeyPaths = lib.mkDefault [ ];
-
-        sops.defaultSopsFile = lib.mkIf (builtins.pathExists sopsFile) sopsFile;
-      };
+    nixos.imports = [ inputs.sops-nix.nixosModules.sops ];
+    darwin.imports = [ inputs.sops-nix.darwinModules.sops ];
 
     homeManager =
       {
