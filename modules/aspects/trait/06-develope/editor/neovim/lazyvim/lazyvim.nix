@@ -3,7 +3,7 @@
   den.aspects.dev.editor.neovim.lazyvim.homeManager =
     { config, pkgs, ... }:
     let
-      root = "${config.home.homeDirectory}/Den-Infra";
+      root = "${config.home.homeDirectory}/Infra";
     in
     {
       # out-of-store symlink：直接改 _lazyvim/ 下的 lua 即刻生效，无需 rebuild

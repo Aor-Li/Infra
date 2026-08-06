@@ -5,7 +5,7 @@
     let
       # 仓库根路径。源仓库把它写死为 /home/aor/infra（并留有兼容 TODO），
       # 这里改为从 home 目录推导，与 feature/nix/nh.nix 的约定一致。
-      root = "${config.home.homeDirectory}/Den-Infra";
+      root = "${config.home.homeDirectory}/Infra";
 
       # TODO: 该脚本依赖 `<root>/devenvs/<project>` 目录，但该目录目前并不存在
       # （源仓库亦然），直接运行会报 "project devenv directory not found"。

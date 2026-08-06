@@ -3,7 +3,7 @@
   den.aspects.dev.tool.fastfetch.homeManager =
     { config, ... }:
     let
-      root = "${config.home.homeDirectory}/Den-Infra";
+      root = "${config.home.homeDirectory}/Infra";
     in
     {
       programs.fastfetch.enable = true;

@@ -1,4 +1,4 @@
-# Den-Infra
+# Infra
 
 个人 Nix flake 配置，统一管理多台设备的 **NixOS / nix-darwin / WSL** 系统与 **home-manager** 家目录环境。
 

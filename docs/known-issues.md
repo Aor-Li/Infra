@@ -144,7 +144,7 @@ den 的 home 实体有 `config.name = lib.mkForce userName`（den 源码 `nix/li
 
 此外 `fullname` / `email` 在 6 个 home 里逐字重复，应下沉到 `den.schema.home` 的默认值。
 
-### 5. 仓库根路径 `~/Den-Infra` 在 5 处硬编码，其中 3 处还内嵌了完整模块路径
+### 5. 仓库根路径 `~/Infra` 在 5 处硬编码，其中 3 处还内嵌了完整模块路径
 
 - `trait/01-nix/tool/nh.nix:8`
 - `trait/06-develope/editor/neovim/lazyvim/lazyvim.nix:6`

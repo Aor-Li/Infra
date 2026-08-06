@@ -8,7 +8,7 @@
   den.aspects.desktop.shell.quickshell.dank.homeManager =
     { config, ... }:
     let
-      root = "${config.home.homeDirectory}/Den-Infra";
+      root = "${config.home.homeDirectory}/Infra";
 
       dankModule = {
         programs.dank-material-shell = {
