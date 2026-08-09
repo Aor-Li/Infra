@@ -1,4 +1,3 @@
-# 关掉它你会失去：Claude Code 本体，以及它读到共享 skill / prompt 的那两条链接。
 { inputs, ... }:
 {
   den.aspects.dev.ai.agent.claude.homeManager =

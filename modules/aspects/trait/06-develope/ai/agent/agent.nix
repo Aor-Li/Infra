@@ -1,5 +1,3 @@
-# 关掉它你会失去：所有 AI 工具的本体，以及它们各自私有的那点接线。
-# 现在是三个 CLI，将来的 TUI / 桌面 UI 同样一个文件放进这里。
 { den, ... }:
 {
   flake-file.inputs.llm-agents.url = "github:numtide/llm-agents.nix";

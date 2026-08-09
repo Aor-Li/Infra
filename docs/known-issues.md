@@ -220,7 +220,7 @@ den 的 home 实体有 `config.name = lib.mkForce userName`（den 源码 `nix/li
 
 - `trait/02-system/tools.nix:18` `environment.variables.EDITOR = "nvim"`，而 lazyvim 把 `nvim` alias 成 `nvim-lazy`——EDITOR 实际指向没有配置的 plain nvim
 - `trait/01-nix/conf.nix`（审计时名为 `settings.nix`）darwin 的 `trusted-users` 里有 `@wheel`，darwin 上没这个组
-- `trait/06-develope/ai/ai.nix:8-14` 用 `os` class 加 numtide substituter，但 claude-code 是 `home.packages` 装的；由于 `meta/schema/user.nix` 设了 `den.schema.user.classes = [ ]`，HM 只走 standalone 路径，**拿不到**这个 cache
+- `trait/06-develope/ai/agent/agent.nix` 用 `os` class 加 numtide substituter，但 claude-code 是 `home.packages` 装的；由于 `meta/schema/user.nix` 设了 `den.schema.user.classes = [ ]`，HM 只走 standalone 路径，**拿不到**这个 cache（该文件已同时在 `homeManager` class 上写了一份作为绕行）
 - secrets 的 `hosts/` 与 `users/` 目录尚不存在，`.sops.yaml` 与 tailscale 都还是 TODO 状态（已有注释说明，属已知）
 
 ---

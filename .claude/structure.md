@@ -110,7 +110,7 @@ trait/
 │   ├── vcs/                    git / lazygit / gh / delta / 签名
 │   ├── env/                    项目级环境：direnv / devenv / 开发容器 / 模板
 │   ├── ops/                    运维客户端：kubectl / k9s / terraform / 云 CLI
-│   ├── ai/                     claude-code / codex / MCP / agent 配置
+│   ├── ai/                     agent 本体与私有接线（agent/）+ 共享资产（mine/ vendor/）
 │   └── tool/                   独立 CLI：调用完就结束、不与上面任何一环耦合
 │
 ├── app/                    问：这是哪一类日常应用？
@@ -321,10 +321,11 @@ den.hosts.x86_64-linux.Tobimune.settings.system.power.sleep.neverSleep = true;
 
 - 目录 `X/` 的汇总点固定是 `X/X.nix`，**只写 `includes` 和该层所有子节点共享的
   配置**，不装单个程序的包。
-- `_name/` 前缀表示**不参与 import-tree 自动导入**，用于与消费模块同目录的非模块
-  实现细节：非 nix 载荷（`_lazyvim/`、dank 的 `*.kdl`），或由特性入口显式
-  `import` 的 Nix helper（`meta/aspect-settings/_lib/`）。特性入口本身不加 `_`
-  前缀，继续由 import-tree 自动发现。
+- `_name/` 前缀表示**不参与 import-tree 自动导入**。**必须**加前缀的只有含 `.nix`
+  的非模块目录——由特性入口显式 `import` 的 Nix helper（`meta/aspect-settings/_lib/`），
+  以及可能夹带 `.nix` 的第三方载荷（`_lazyvim/`）。纯非 nix 载荷（dank 的 `dms/`、
+  ai 的 `mine/skills/`）本来就不会被导入，不加前缀，目录名直接说明它是什么。
+  特性入口本身永远不加 `_`，继续由 import-tree 自动发现。
 - **预留槽位**（`terminal/` `prompt/` `multiplexer/` `vpn/` `browser/`）即使只有
   一个文件也建目录——它们是 API 的一部分，加第二个成员时零改动。
   **松散分组**才适用"攒够 3 个再拆目录"。

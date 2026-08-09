@@ -40,7 +40,7 @@ sops.secrets.anthropic_auth_token = { };
 
 ## 待办
 
-- [`06-develope/ai/claude.nix`](../../06-develope/ai/claude.nix) 中 provider 认证（`ANTHROPIC_AUTH_TOKEN` 与
+- [`06-develope/ai/agent/claude.nix`](../../06-develope/ai/agent/claude.nix) 中 provider 认证（`ANTHROPIC_AUTH_TOKEN` 与
   `~/.claude/settings.json`）的 sops 配置目前是注释状态，待放好 `entity/users/aor/secrets.yaml` 后接回。
 - [`03-network/tailscale.nix`](../../03-network/tailscale.nix) 待用 `authKeyFile` 免交互入网。
 - [`.sops.yaml`](.sops.yaml) 中系统级规则暂用 aor 个人 key，待各主机生成 age key 后按主机拆分。
