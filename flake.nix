@@ -25,6 +25,10 @@
     };
     import-tree.url = "github:denful/import-tree";
     llm-agents.url = "github:numtide/llm-agents.nix";
+    mattpocock-skills = {
+      url = "github:mattpocock/skills";
+      flake = false;
+    };
     niri = {
       url = "github:sodiboo/niri-flake";
       inputs.nixpkgs.follows = "nixpkgs";
