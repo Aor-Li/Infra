@@ -4,7 +4,6 @@ let
     experimental-features = lib.mkDefault [
       "nix-command"
       "flakes"
-      "pipe-operators"
     ];
 
     # Plain `substituters` (not `extra-substituters`) so the CN mirrors are
@@ -30,21 +29,27 @@ let
 in
 {
   den.aspects.nix.conf = {
-    nixos = lib.recursiveUpdate common {
-      nix.settings.trusted-users = [ "@wheel" ];
-      nixpkgs.config.allowUnfree = true;
-    };
+    nixos =
+      { pkgs, ... }:
+      lib.recursiveUpdate common {
+        nix.package = pkgs.lix;
+        nix.settings.trusted-users = [ "@wheel" ];
+        nixpkgs.config.allowUnfree = true;
+      };
 
-    darwin = lib.recursiveUpdate common {
-      nix.settings.trusted-users = [ "@admin" "@wheel" ];
-      nixpkgs.config.allowUnfree = true;
-    };
+    darwin =
+      { pkgs, ... }:
+      lib.recursiveUpdate common {
+        nix.package = pkgs.lix;
+        nix.settings.trusted-users = [ "@admin" "@wheel" ];
+        nixpkgs.config.allowUnfree = true;
+      };
 
     homeManager =
       { pkgs, ... }:
       lib.recursiveUpdate common {
         # standalone home-manager needs an explicit nix package to write nix.conf
-        nix.package = pkgs.nix;
+        nix.package = pkgs.lix;
         nixpkgs.config.allowUnfreePredicate = _: true;
       };
   };
