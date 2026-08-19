@@ -17,6 +17,7 @@
       den.aspects.security
       den.aspects.network
       den.aspects.dev
+      den.aspects.app
 
       den.provides.define-user
       den.provides.hostname
