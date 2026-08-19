@@ -343,6 +343,26 @@
         "type": "github"
       }
     },
+    "nix-index-database": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786852476,
+        "narHash": "sha256-IM5CYtf86W4w8eUPpKcY/LpdHElmVBtJhaKnoTKxZEA=",
+        "owner": "nix-community",
+        "repo": "nix-index-database",
+        "rev": "c7962dc97b45129df8d751bedaf37beb5a17706e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "nix-index-database",
+        "type": "github"
+      }
+    },
     "nixos-wsl": {
       "inputs": {
         "flake-compat": "flake-compat_2",
@@ -428,6 +448,22 @@
         "type": "github"
       }
     },
+    "orca-skills": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787128409,
+        "narHash": "sha256-SbG8MLr12ExXqjHYYtNV/eM9B66CmX318CDIkJc/nb4=",
+        "owner": "stablyai",
+        "repo": "orca",
+        "rev": "73f7767eddce1d359c4f2cf342bd9a5a8b6013b9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "stablyai",
+        "repo": "orca",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "darwin": "darwin",
@@ -441,8 +477,10 @@
         "llm-agents": "llm-agents",
         "mattpocock-skills": "mattpocock-skills",
         "niri": "niri",
+        "nix-index-database": "nix-index-database",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs_3",
+        "orca-skills": "orca-skills",
         "sops-nix": "sops-nix"
       }
     },

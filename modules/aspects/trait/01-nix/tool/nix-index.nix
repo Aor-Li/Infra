@@ -1,6 +1,18 @@
-{ den, ... }:
+{ den, inputs, ... }:
 {
+  flake-file.inputs.nix-index-database = {
+    url = "github:nix-community/nix-index-database";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
   den.aspects.nix.nix-index.homeManager = {
-    programs.nix-index.enable = true;
+    imports = [ inputs.nix-index-database.homeModules.nix-index ];
+
+    programs.nix-index = {
+      enable = true;
+      enableZshIntegration = true;
+      enableBashIntegration = true;
+      enableFishIntegration = true;
+    };
   };
 }
