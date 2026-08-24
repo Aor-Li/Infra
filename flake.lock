@@ -448,22 +448,6 @@
         "type": "github"
       }
     },
-    "orca-skills": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1787128409,
-        "narHash": "sha256-SbG8MLr12ExXqjHYYtNV/eM9B66CmX318CDIkJc/nb4=",
-        "owner": "stablyai",
-        "repo": "orca",
-        "rev": "73f7767eddce1d359c4f2cf342bd9a5a8b6013b9",
-        "type": "github"
-      },
-      "original": {
-        "owner": "stablyai",
-        "repo": "orca",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "darwin": "darwin",
@@ -480,7 +464,6 @@
         "nix-index-database": "nix-index-database",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs_3",
-        "orca-skills": "orca-skills",
         "sops-nix": "sops-nix"
       }
     },
