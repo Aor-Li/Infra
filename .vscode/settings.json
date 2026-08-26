@@ -1,0 +1,30 @@
+{
+    "window.title": "Infra",
+    "workbench.colorCustomizations": {
+        "statusBarItem.warningBackground": "#d5ea39",
+        "statusBarItem.warningForeground": "#000000",
+        "statusBarItem.warningHoverBackground": "#d5ea39",
+        "statusBarItem.warningHoverForeground": "#00000090",
+        "statusBarItem.remoteBackground": "#d5ea39",
+        "statusBarItem.remoteForeground": "#000000",
+        "statusBarItem.remoteHoverBackground": "#d5ea39",
+        "statusBarItem.remoteHoverForeground": "#00000090",
+        "focusBorder": "#d5ea3999",
+        "progressBar.background": "#d5ea39",
+        "textLink.foreground": "#ffff79",
+        "textLink.activeForeground": "#ffff86",
+        "selection.background": "#c8dd2c",
+        "list.highlightForeground": "#d5ea39",
+        "list.focusAndSelectionOutline": "#d5ea3999",
+        "button.background": "#d5ea39",
+        "button.foreground": "#000000",
+        "button.hoverBackground": "#e2f746",
+        "tab.activeBorderTop": "#e2f746",
+        "pickerGroup.foreground": "#e2f746",
+        "list.activeSelectionBackground": "#d5ea394d",
+        "panelTitle.activeBorder": "#e2f746",
+        "activityBar.activeBorder": "#d5ea39",
+        "activityBarBadge.foreground": "#000000",
+        "activityBarBadge.background": "#d5ea39"
+    }
+}

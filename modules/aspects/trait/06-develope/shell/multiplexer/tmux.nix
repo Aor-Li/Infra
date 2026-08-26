@@ -6,6 +6,14 @@
       programs.tmux = {
         enable = true;
 
+        # tmux 3.7c's configure script requires an explicit jemalloc choice on
+        # Darwin (macOS calloc(3) doesn't reliably zero allocations); upstream
+        # nixpkgs doesn't pass either flag yet, so builds from source fail.
+        # https://github.com/tmux/tmux/commit/(jemalloc detection change)
+        package = pkgs.tmux.overrideAttrs (old: {
+          configureFlags = old.configureFlags ++ [ "--disable-jemalloc" ];
+        });
+
         # basic settings
         clock24 = true;
         baseIndex = 1;
