@@ -1,5 +1,8 @@
 # 配置结构与归属原则
 
+这是 Claude Code、Codex、Cursor 与 OpenCode 共用的项目规则和上下文正本。
+规则只在本文件维护；各工具的兼容入口只负责加载它，不复制正文。
+
 本仓库 `modules/` 下的组织方式，以及"新增一个东西该放哪"的判定规则。
 新增、移动任何配置前先读本文；与本文冲突的改动要么改代码，要么先改本文。
 
@@ -228,9 +231,12 @@ ghostty 在 darwin 用 homebrew 装 —— 这条属于 `dev/shell/terminal/ghos
 
 ## 6. 门控与选项
 
-**系统层 vs home 层的硬规则**：系统层只装"没有 home-manager 也要能救机"的东西
-（vim / curl / git / 基本网络工具），其余一律 home 层。没有这条，
-`system/` 和 `dev/tool/` 会永远互相渗透。
+**软件配置入口的优先级**：优先通过 home-manager 管理。有对应模块时用
+`programs.<name>` / `services.<name>` 完成安装和配置；没有模块时用
+`home.packages`。只有软件必须在登录前或没有用户会话时生效、需要系统级集成、
+是没有 home-manager 也要能救机的基础工具（vim / curl / git / 基本网络工具），
+或目标平台只能由系统层安装时，才使用 NixOS / nix-darwin 的模块或
+`environment.systemPackages`。没有这条，`system/` 和 `dev/tool/` 会永远互相渗透。
 
 **门控只回答"装了之后在这个平台/环境上怎么实现"**，不兼职回答"装不装"——后者
 是 entity include 的活。
