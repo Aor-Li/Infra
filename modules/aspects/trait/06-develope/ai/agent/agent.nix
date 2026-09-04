@@ -1,3 +1,4 @@
+# 关掉它你会失去：所有 AI agent 本体与各自的私有接线。
 { den, ... }:
 {
   flake-file.inputs.llm-agents.url = "github:numtide/llm-agents.nix";
@@ -24,6 +25,8 @@
         den.aspects.dev.ai.agent.claude
         den.aspects.dev.ai.agent.codex
         den.aspects.dev.ai.agent.cursor
+        den.aspects.dev.ai.agent.opencode
+        den.aspects.dev.ai.agent.pi
       ];
     };
 }
