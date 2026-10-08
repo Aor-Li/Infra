@@ -13,13 +13,13 @@
 let
   inherit (lib) mkOption types;
 
-  # 哪些键**不是**子 aspect：den 的结构键（includes / provides / meta / …，
-  # `settings` 由 default.nix 的 den.reservedKeys 加进这个集合）、已注册的 class 名
+  # 哪些键**不是**子 aspect：den 的结构键（includes / provides / meta / `__` 前缀 …，
+  # `settings` 由 default.nix 的 den.reservedKeys 并入这条判定）、已注册的 class 名
   # （nixos / darwin / homeManager）、以及 quirk/pipe 键。
-  inherit (den.lib.aspects.fx.keyClassification) structuralKeysSet;
+  inherit (den.lib.aspects.fx.keyClassification) isStructuralKey;
   classKeys = den.classes or { };
   quirkKeys = den.quirks or { };
-  skipKey = k: structuralKeysSet ? ${k} || classKeys ? ${k} || quirkKeys ? ${k};
+  skipKey = k: isStructuralKey k || classKeys ? ${k} || quirkKeys ? ${k};
 
   # settings 块有两种写法：裸选项集 `{ foo = mkOption {...}; }`，或 module 形态
   # `{ options; config; imports; }`（需要计算型默认值时才用后者）。统一成后者。
