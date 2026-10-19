@@ -15,7 +15,7 @@
 { den, lib, ... }:
 let
   tree = import ./_lib/tree.nix { inherit den lib; };
-  assertDeclarationsOnly = import ./_lib/lint.nix { inherit den lib tree; };
+  lint = import ./_lib/lint.nix { inherit den lib tree; };
 in
 {
   den = {
@@ -31,7 +31,10 @@ in
     # import 进 host / user / home 三种实体——standalone home-manager 也就跟着有了
     # 同一棵 settings 树。
     schema.conf.options.settings = lib.mkOption {
-      type = assertDeclarationsOnly tree.settingsType;
+      type = lib.types.submodule [
+        tree.settingsModule
+        lint
+      ];
       default = { };
       description = "各 aspect 自带的类型化配置项，按 aspect 路径寻址。";
     };

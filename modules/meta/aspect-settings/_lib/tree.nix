@@ -79,5 +79,6 @@ in
   # lint.nix 要走同一棵树、按同样的规则判断，复用这两个原语。
   inherit skipKey reshapeSettings;
 
-  settingsType = types.submodule (nodeModule (den.aspects or { }));
+  # 镜像出来的根 module；default.nix 把它和 lint 一起组装成 settings 的 submodule 类型。
+  settingsModule = nodeModule (den.aspects or { });
 }
