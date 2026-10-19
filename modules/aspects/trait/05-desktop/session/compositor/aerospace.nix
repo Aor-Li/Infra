@@ -132,6 +132,16 @@
         };
       };
 
+      # 焦点窗口描边：平铺下一眼区分当前窗口（Catppuccin Mocha mauve / surface1）
+      services.jankyborders = {
+        enable = true;
+        style = "round";
+        width = 5.0;
+        hidpi = true;
+        active_color = "0xffcba6f7";
+        inactive_color = "0xff45475a";
+      };
+
       # AeroSpace 自己模拟工作区，依赖这两项 Mission Control 设置才能正常工作：
       # https://nikitabobko.github.io/AeroSpace/guide#a-note-on-mission-control
       system.defaults = {
