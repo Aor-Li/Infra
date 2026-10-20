@@ -17,9 +17,11 @@
         # basic settings
         clock24 = true;
         baseIndex = 1;
+        mouse = true;
 
-        # Stop tmux+escape craziness.
-        escapeTime = 0;
+        # Stop tmux+escape craziness. 0 会让部分终端把 Alt 组合键当成 ESC 序列拆开，
+        # 50ms 是上限体验和 Alt 键可靠性之间的折中。
+        escapeTime = 50;
 
         # Force tmux to use /tmp for sockets (WSL2 compat)
         secureSocket = false;
@@ -29,6 +31,7 @@
           catppuccin
           cpu
           battery
+          yank
         ];
 
         # configuration file
@@ -37,12 +40,10 @@
           ###################################################################
           ###  Basic Function Settings                                    ###
           ###################################################################
-          set-option -g mouse on
           # do not rename window automaticly
           set-option -g allow-rename off
           # renumber when window closed
           set -g renumber-window on
-          set -sg escape-time 100
           ###################################################################
           ###  Basic KeyBinds Settings                                    ###
           ###################################################################
@@ -80,7 +81,6 @@
           set -agF status-right "#{E:@catppuccin_status_battery}"
           run-shell ${pkgs.tmuxPlugins.cpu}/share/tmux-plugins/cpu/cpu.tmux
           run-shell ${pkgs.tmuxPlugins.battery}/share/tmux-plugins/battery/battery.tmux
-          # plugins: yank
         '';
       };
     };

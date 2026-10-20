@@ -75,6 +75,6 @@
   den.homes.x86_64-linux."aor@philo" = {
     name = "aor@philo";
     fullname = "Aor-Li";
-    email = "liyifeng0039@gmail.com";
+    email = "liyifeng@philoai.com";
   };
 }

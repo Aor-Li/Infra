@@ -50,6 +50,10 @@ in
       lib.recursiveUpdate common {
         # standalone home-manager needs an explicit nix package to write nix.conf
         nix.package = pkgs.lix;
+        # HM 只拿 nix.package 生成 nix.conf，不会把它装进 profile。非 NixOS 机器上
+        # 安装器放进 profile 的 nix 会在 HM 第一次接管 profile 时被挤掉，之后机器上
+        # 就没有任何 nix 可用（连 gc 后的自救都做不了），所以这里显式装上。
+        home.packages = [ pkgs.lix ];
         nixpkgs.config.allowUnfreePredicate = _: true;
       };
   };
