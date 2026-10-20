@@ -12,6 +12,7 @@
     {
       home.packages = [
         python
+        pkgs.uv # 项目/工具级的包与解释器管理
       ];
     };
 }
