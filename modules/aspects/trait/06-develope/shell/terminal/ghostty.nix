@@ -23,7 +23,6 @@
         settings = {
           theme = "Catppuccin Mocha";
           font-family = [
-            "ComicShannsMono Nerd Font"
             "CaskaydiaCove Nerd Font"
             "等距更纱黑体 SC"
           ];

@@ -136,7 +136,7 @@
       # 用直角：ghostty 是直角窗口，而 round 的圆角半径固定、无法调，对不上
       services.jankyborders = {
         enable = true;
-        style = "square";
+        style = "round";
         width = 5.0;
         hidpi = true;
         active_color = "0xffcba6f7";
