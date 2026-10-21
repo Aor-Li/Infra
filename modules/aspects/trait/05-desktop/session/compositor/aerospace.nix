@@ -26,6 +26,21 @@
 
           key-mapping.preset = "qwerty";
 
+          # 工作区与显示器的绑定默认是"粘性"的：上次在哪块屏显示就留在哪块屏，
+          # 副屏接入时若没有可用的空工作区，会自动新建一个 10 并卡在上面。
+          # 显式分配后副屏固定拿 6-9；副屏不在时这些工作区自动回落到主屏。
+          workspace-to-monitor-force-assignment = {
+            "1" = "main";
+            "2" = "main";
+            "3" = "main";
+            "4" = "main";
+            "5" = "main";
+            "6" = "secondary";
+            "7" = "secondary";
+            "8" = "secondary";
+            "9" = "secondary";
+          };
+
           gaps = {
             inner.horizontal = 8;
             inner.vertical = 8;
