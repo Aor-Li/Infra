@@ -1,13 +1,11 @@
-{ ... }:
 {
   den.aspects.dev.env.devenv.homeManager =
     { config, pkgs, ... }:
     let
       root = config.lib.repo.root;
 
-      # TODO: 该脚本依赖 `<root>/devenvs/<project>` 目录，但该目录目前并不存在
-      # （源仓库亦然），直接运行会报 "project devenv directory not found"。
-      # 需要时再补建 devenvs/ 或重写此脚本。
+      # 把 `<root>/devenvs/<project>/` 下的 devenv 三件套以 symlink 投放到当前目录，
+      # 用法与模板见仓库根的 devenvs/README.md。
       devenv-deploy = pkgs.writeShellApplication {
         name = "devenv-deploy";
         runtimeInputs = [ pkgs.coreutils ];

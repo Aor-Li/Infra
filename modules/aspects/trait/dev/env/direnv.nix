@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.dev.env.direnv.homeManager = {
     programs.direnv = {

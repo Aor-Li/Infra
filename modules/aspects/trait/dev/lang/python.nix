@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.dev.lang.python.homeManager =
     { pkgs, ... }:

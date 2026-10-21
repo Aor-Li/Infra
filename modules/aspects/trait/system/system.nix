@@ -8,6 +8,7 @@
 
     den.aspects.system.fonts
     den.aspects.system.locale
+    den.aspects.system.theme
     den.aspects.system.tools
     den.aspects.system.xdg
   ];

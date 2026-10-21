@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.dev.shell.multiplexer.herdr = {
     homeManager =

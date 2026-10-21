@@ -1,5 +1,4 @@
 # 关掉它你会失去：hf 命令行（Hugging Face Hub 的模型 / 数据集下载与上传）。
-{ ... }:
 {
   den.aspects.dev.tool.hf.homeManager =
     { pkgs, ... }:

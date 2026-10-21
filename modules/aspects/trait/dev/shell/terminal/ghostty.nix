@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.dev.shell.terminal.ghostty = {
 
@@ -16,13 +15,8 @@
         enableZshIntegration = true;
         enableFishIntegration = true;
 
+        # 配色 / 字体 / 字号由 stylix 生成（system/theme.nix）
         settings = {
-          theme = "Catppuccin Mocha";
-          font-family = [
-            "CaskaydiaCove Nerd Font"
-            "等距更纱黑体 SC"
-          ];
-
           # window：去掉标题栏但保留原生边框 / 圆角 / 阴影，平铺时窗口边界清晰
           # 注意 window-decoration = "none" 在 macOS 上会连 tabs 一起禁用
           macos-titlebar-style = "hidden";

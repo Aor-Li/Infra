@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.dev.vcs.gh = {
     homeManager = { pkgs, ... }: {

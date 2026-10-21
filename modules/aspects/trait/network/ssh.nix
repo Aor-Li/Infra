@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.network.ssh =
     { host, ... }:

@@ -1,0 +1,190 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+format = """
+[](red)\
+$shell\
+$username\
+[](bg:orange fg:red)\
+$os\
+$hostname\
+$directory\
+[](bg:yellow fg:orange)\
+$git_branch\
+$git_status\
+[](fg:yellow bg:green)\
+$c\
+$rust\
+$golang\
+$nodejs\
+$php\
+$java\
+$kotlin\
+$haskell\
+$python\
+[](fg:green bg:cyan)\
+$conda\
+[](fg:cyan bg:base07)\
+$time\
+[ ](fg:base07)\
+$cmd_duration\
+$line_break\
+$nix_shell\
+$character"""
+
+[shell]
+disabled = false
+bash_indicator = ""
+fish_indicator = "󱙴"
+zsh_indicator = "󰰶"
+unknown_indicator = "󱧤"
+style = "bg:red fg:black"
+format = '[$indicator ]($style)'
+
+[username]
+show_always = true
+style_user = "bg:red fg:black"
+style_root = "bg:red fg:black"
+format = '[ $user ]($style)'
+
+[os]
+disabled = false
+style = "bg:orange fg:black"
+format = '[ $symbol]($style)'
+
+[os.symbols]
+Windows = ""
+Ubuntu = "󰕈"
+SUSE = ""
+Raspbian = "󰐿"
+Mint = "󰣭"
+Macos = "󰀵"
+Manjaro = ""
+Linux = ""
+Gentoo = "󰣨"
+Fedora = "󰣛"
+Alpine = ""
+Amazon = ""
+Android = ""
+Arch = "󰣇"
+Artix = "󰣇"
+CentOS = ""
+Debian = "󰣚"
+Redhat = "󱄛"
+RedHatEnterprise = "󱄛"
+NixOS = ""
+
+[hostname]
+style = "bg:orange fg:black"
+format = '[$hostname]($style)'
+
+[directory]
+style = "bg:orange fg:black"
+format = "[   $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Developer" = "󰲋 "
+
+[git_branch]
+symbol = ""
+style = "bg:yellow"
+format = '[[ $symbol $branch ](fg:black bg:yellow)]($style)'
+
+[git_status]
+style = "bg:yellow"
+format = '[[($all_status$ahead_behind )](fg:black bg:yellow)]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:black bg:green)]($style)'
+
+[c]
+symbol = " "
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:black bg:green)]($style)'
+
+[rust]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:black bg:green)]($style)'
+
+[golang]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:black bg:green)]($style)'
+
+[php]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:black bg:green)]($style)'
+
+[java]
+symbol = " "
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:black bg:green)]($style)'
+
+[kotlin]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:black bg:green)]($style)'
+
+[haskell]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version) ](fg:black bg:green)]($style)'
+
+[python]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $version)(\(#$virtualenv\)) ](fg:black bg:green)]($style)'
+
+[docker_context]
+symbol = ""
+style = "bg:cyan"
+format = '[[ $symbol( $context) ](fg:black bg:cyan)]($style)'
+
+[conda]
+symbol = "  "
+style = "fg:black bg:cyan"
+format = '[$symbol$environment ]($style)'
+ignore_base = false
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:base07"
+format = '[[  $time ](fg:black bg:base07)]($style)'
+
+[nix_shell]
+disabled = false
+impure_msg = '[impure shell](fg:black bg:purple)'
+pure_msg = '[pure shell](fg:black bg:purple)'
+unknown_msg = '[unknown shell](fg:black bg:purple)'
+format = 'via [](fg:purple)[󰜗 $state( \($name\)) ](fg:black bg:purple)[ ](fg:purple)'
+
+[line_break]
+disabled = true
+
+[character]
+disabled = false
+success_symbol = '[❯](bold fg:green)'
+error_symbol = '[❯](bold fg:red)'
+vimcmd_symbol = '[❮](bold fg:green)'
+vimcmd_replace_one_symbol = '[❮](bold fg:base07)'
+vimcmd_replace_symbol = '[❮](bold fg:base07)'
+vimcmd_visual_symbol = '[❮](bold fg:yellow)'
+
+[cmd_duration]
+show_milliseconds = true
+format = " in $duration "
+style = "bg:base07"
+disabled = false
+show_notifications = true
+min_time_to_notify = 45000
+

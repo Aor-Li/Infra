@@ -53,8 +53,23 @@
 只剩 `aor@philo`。问题 1 / 2 依赖的「多个 home 共用 den 用户名」场景因此不再存在；上面表格里关于
 `"aor@<Host>".includes` 的处理方式已过时。
 
-仍未处理：`home.theme` 选项（catppuccin 目前在 ghostty / tmux / starship / aerospace 各写一份）、secrets 整条链、
-三台 nixos 机器的硬件配置占位。
+**2026-10-21 第二轮：**
+
+- statix 的空 pattern（28 处 `{ ... }:`）全部去掉；六个配置的 drvPath 前后逐字节相同。剩下的 statix 警告只有
+  「重复 key」（`home.packages` + `home.sessionVariables` 分行写之类），是有意的可读性写法，不改。
+- `devenv-deploy` 依赖的 `devenvs/` 已建（仓库根，含 `example/` 模板与 README），实测投放 + `devenv shell` 可用。
+- fastfetch 配置去掉写死的 `nixos_old` logo（「只适合 Bokatsu」的 TODO），按系统自动选。
+- 配色收口到 stylix（`system/theme.nix`，catppuccin-mocha base16 方案，进基线）。ghostty / tmux / starship /
+  jankyborders 的手写配色删除：tmux 去掉 catppuccin 插件（状态栏改为手写的 command / CPU / session / battery），
+  starship toml 改名 `powerline.toml` 并改用 stylix 的 base16 色名，终端字体交给 `stylix.fonts`（更纱黑体 fallback
+  不再显式列出）。lazyvim 的 colorscheme 在仓库外的 lua 里，不受 stylix 管，仍是 catppuccin。
+  六个配置求值无警告，Magatsumi 实际构建通过。
+
+仍未处理：
+
+- secrets 整条链：`entity/users/aor/secrets.yaml` 里只有一个 `placeholder`，没有真实密钥可接；需要先往里放内容
+  （claude provider token、tailscale authkey 等），再在消费方就近声明 `sops.secrets`。
+- 三台 nixos 机器的 `fileSystems` 占位：必须在实机 / VM 上跑 `nixos-generate-config` 拿到真实硬件配置。
 
 ---
 

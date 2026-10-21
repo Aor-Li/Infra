@@ -7,7 +7,7 @@
           enable = true;
           enableBashIntegration = true;
           enableFishIntegration = true;
-          settings = lib.importTOML ./catppuccin-powerline.toml;
+          settings = lib.importTOML ./powerline.toml;
         };
       };
   };

@@ -1,6 +1,5 @@
 # 关掉它你会失去：Cursor 读到共享 prompt 的那条链接。
 # 只有配置没有本体：Cursor 是手装的 .app，本仓库不管。
-{ ... }:
 {
   den.aspects.dev.ai.agent.cursor.homeManager =
     { config, ... }:

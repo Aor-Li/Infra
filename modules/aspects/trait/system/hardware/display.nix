@@ -1,5 +1,4 @@
 # 关掉它：外接显示器只剩系统给的那几档缩放，亮度与 HiDPI 都得手动点。
-{ ... }:
 {
   den.aspects.system.hardware.display = {
 

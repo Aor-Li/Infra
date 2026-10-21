@@ -1,5 +1,4 @@
 # 关掉它你会失去：rust 工具链（cargo / rustc）、rust-analyzer、rustfmt、clippy。
-{ ... }:
 {
   den.aspects.dev.lang.rust.homeManager =
     { config, pkgs, ... }:

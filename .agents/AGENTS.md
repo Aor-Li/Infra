@@ -88,6 +88,7 @@ trait/
 │   │   └── wsl.nix
 │   ├── locale.nix              时区 / i18n
 │   ├── fonts.nix               ★ 终端与桌面共享的资源，故在 system 而非 desktop
+│   ├── theme.nix               ★ 同上：stylix，一份 base16 方案给所有程序配色
 │   ├── xdg.nix
 │   └── power.nix               休眠 / 电源策略
 │
@@ -219,7 +220,7 @@ rust-analyzer 和 gitlens。不要为了分类纯洁性切成四份塞进 lang/v
 | ssh | 客户端 `network/`、sshd `service/` | ② 同上 |
 | 字体 | `system/fonts` | ③ 终端与桌面共享 |
 | CA 证书 | `security/` | ③ 被网络/浏览器/开发工具共享 |
-| catppuccin 配色 | `home.theme` 选项 | ③ 极致形态：上移到不再是 trait |
+| 配色（catppuccin） | `system/theme.nix`（stylix） | ③ 各程序不写配色，由 stylix target 生成 |
 
 ## 5. 不该建的目录
 
@@ -227,7 +228,7 @@ rust-analyzer 和 gitlens。不要为了分类纯洁性切成四份塞进 lang/v
 
 | 想建的 | 正确位置 |
 |---|---|
-| `theme/` `catppuccin/` | `home.theme` 选项，各程序自己读 |
+| `theme/` `catppuccin/` | `system/theme.nix` 一个文件；不要某个 target 时在该程序的 trait 里 `stylix.targets.<name>.enable = false` |
 | `darwin/` `wsl/` 作为顶层 | trait 内的 class + `host.distro` / `host.virt` 门控 |
 | `server-tools/` `laptop/` | entity 里显式 include |
 | `home/` 与 `system/` 两棵平行树 | 同一 trait 内的 `homeManager` / `nixos` class |

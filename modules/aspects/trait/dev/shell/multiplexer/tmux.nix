@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.dev.shell.multiplexer.tmux.homeManager =
     { pkgs, ... }:
@@ -19,8 +18,8 @@
         secureSocket = false;
 
         # add plugins
+        # 配色由 stylix 生成（system/theme.nix），这里不再装主题插件
         plugins = with pkgs.tmuxPlugins; [
-          catppuccin
           cpu
           battery
           yank
@@ -54,23 +53,14 @@
           set -ga terminal-overrides ",*256col*:Tc"
           set -ga terminal-overrides '*:Ss=\E[%p1%d q:Se=\E[ q'
           set-environment -g COLORTERM "truecolor"
-          # --- themes: catppuccin ---
-          set -g @catppuccin_flavor "mocha"
-          set -g @catppuccin_window_status_style "slanted" # idk why but rounded not work for me
-          set -g @catppuccin_window_default_text "#W"
-          set -g @catppuccin_window_current_text "#W"
-          set -g @catppuccin_window_text "#W"
           # --- status bar ---
           set-option -g status-position top
-          run-shell ${pkgs.tmuxPlugins.catppuccin}/share/tmux-plugins/catppuccin/catppuccin.tmux
           set -g status-right-length 100
           set -g status-left-length 100
           set -g status-left ""
-          set -g status-right "#{E:@catppuccin_status_application}"
-          set -agF status-right "#{E:@catppuccin_status_cpu}"
-          set -ag status-right "#{E:@catppuccin_status_session}"
-          set -ag status-right "#{E:@catppuccin_status_uptime}"
-          set -agF status-right "#{E:@catppuccin_status_battery}"
+          set -g window-status-format " #I #W "
+          set -g window-status-current-format " #I #W "
+          set -g status-right " #{pane_current_command} │ CPU #{cpu_percentage} │ #S │ #{battery_icon} #{battery_percentage} "
           run-shell ${pkgs.tmuxPlugins.cpu}/share/tmux-plugins/cpu/cpu.tmux
           run-shell ${pkgs.tmuxPlugins.battery}/share/tmux-plugins/battery/battery.tmux
         '';

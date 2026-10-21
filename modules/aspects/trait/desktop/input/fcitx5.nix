@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.desktop.input.fcitx5.nixos =
     { pkgs, ... }:

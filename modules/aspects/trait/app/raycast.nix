@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.app.raycast = {
     darwin = {

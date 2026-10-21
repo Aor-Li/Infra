@@ -1,5 +1,4 @@
 # 关掉它你会失去：node 运行时与 npm / npx。
-{ ... }:
 {
   den.aspects.dev.lang.node.homeManager =
     { config, pkgs, ... }:

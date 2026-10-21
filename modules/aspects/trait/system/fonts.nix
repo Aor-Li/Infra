@@ -1,4 +1,3 @@
-{ ... }:
 {
   den.aspects.system.fonts = {
     os =
