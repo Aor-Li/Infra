@@ -27,8 +27,18 @@ modules/
 
 **没有 preset 层。** 组合决策只有两个来源：
 
-- 全体适用 → `schema/config/default.nix` 的 `den.default.includes`
-- 个体差异 → `entity/hosts/*.nix` 里显式 include
+- 全体适用 → `aspects/default/default.nix` 的 `den.default.includes`
+- 个体差异 → `entity/hosts/<Host>/default.nix` 里显式 include
+
+home-manager 在本仓库一律 standalone 运行，而 den **不会把 host 的 includes 推给 standalone
+home**（这是设计，不是 bug）。所以一个可选面向要同时落到系统侧和 home 侧，entity 里要写两行：
+
+```nix
+den.aspects.Enten.includes       = [ den.aspects.desktop ];  # → nixosConfigurations.Enten
+den.aspects."aor@Enten".includes = [ den.aspects.desktop ];  # → homeConfigurations."aor@Enten"
+```
+
+同一个 trait 的 `nixos` / `homeManager` class 各自只在对应的 pipeline 里生效，重复 include 不会互相干扰。
 
 方向性硬规则：**基线只放真正全体适用的东西，可选部分一律由 entity 加进来，
 绝不"全体加 + 个别减"**。Nix 的 module 系统里 include 容易、移除难，一旦基线
@@ -336,5 +346,7 @@ den.hosts.x86_64-linux.Tobimune.settings.system.power.sleep.neverSleep = true;
   一个文件也建目录——它们是 API 的一部分，加第二个成员时零改动。
   **松散分组**才适用"攒够 3 个再拆目录"。
 - 每个 trait 文件开头一行注释写"关掉它你会失去什么"。写不出来 = 归错地方了。
-- 仓库路径不要在各文件里各写一遍：用 home 层的 `repoRoot` 选项 + `mkRepoLink`
-  helper 集中一处，目录移动时只改一个地方。
+- 仓库路径不要在各文件里各写一遍：home 层有 `repoRoot` 选项（`meta/schema/home.nix`，默认
+  `~/Infra`）和 `config.lib.repo.{root,link,path}` helper（`aspects/default/home.nix`）。链回仓库
+  工作区的 out-of-store symlink 一律写 `config.lib.repo.link ./相对路径`——模块在仓库里的位置由
+  helper 算出来，目录移动时链接自动跟着走。

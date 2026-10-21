@@ -1,4 +1,0 @@
-{ den, ... }:
-{
-  den.schema.host = {};
-}

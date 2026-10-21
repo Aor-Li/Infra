@@ -10,6 +10,53 @@
 
 ---
 
+## 复查（2026-10-21，commit 214e62a 之后，den rev `436350e`）
+
+下面的清单是 2026-07-27 的审计记录，**路径按当时的目录名写**（`01-nix/`、`06-develope/` 等，现已改为
+`nix/`、`dev/` …），保留原文作存档。各条当前状态：
+
+| 问题 | 状态 | 说明 |
+| --- | --- | --- |
+| 1 home 的 `host` / `home` 绑定错误 | **已由上游修复** | den [#641](https://github.com/denful/den/pull/641) / [#643](https://github.com/denful/den/pull/643)。探针实测六个 home 各自绑定到自己的 host，`aor@philo` 得到合成的 `{ name; system }`。 |
+| 1 的另一半：host 的 include 不到 home | **已处理（设计如此，非 bug）** | den 文档明确 host 侧内容不流向 standalone home。现在每台桌面机在 `entity/hosts/<Host>/default.nix` 里多写一行 `den.aspects."aor@<Host>".includes`，home 侧 niri / DMS / obsidian 实测已到达。 |
+| 2 dank 缺 `key` | **已处理** | 根因消失后不再需要；niri.nix 的手工 `key` 与 dank 的注释一并移除。 |
+| 3 `app` / `service` 悬空 | **已处理** | `app` 由四台桌面机的 entity include（系统侧 + home 侧各一行），**不再**放进 `den.default`——此前它被加进基线导致 server Tobimune 开了 sunshine。`service` 仍是预留空槽。 |
+| 4 inventory 死配置 | **已处理** | `name =` 六处删除；`fullname` / `email` 下沉为 `meta/schema/home.nix` 默认值，只有 Kumeyuri / philo 覆盖。 |
+| 5 `~/Infra` 硬编码 | **已处理** | 新增 `home.repoRoot` 选项（默认 `~/Infra`）与 `config.lib.repo.{root,link,path}` helper（`aspects/default/home.nix`），`link ./x` 自动算出模块在仓库内的相对路径。七处硬编码全部改走它。 |
+| 6 devshell 未用 | **已处理** | input 与 `flakes/devshell.nix` 删除。 |
+| 7 文档脱节 | **已处理** | README / flakes README / secrets README 更新。 |
+| 8 空目录与空壳 aspect | 部分 | 空目录已不存在。`appearance` / `display-manager` / `service` 作为预留槽位保留；`hardware` 仍只有 betterdisplay，三台 nixos 机器 `fileSystems` 仍是 FIXME 占位。 |
+| 9 命名不一致 | **已处理** | 目录改名：`01-nix`→`nix` … `08-service`→`service`；`editors.nix`→`editor.nix`，`langs.nix`→`lang.nix`；`nix.nh` / `nix.nix-index` 的属性路径改为 `nix.tool.*` 与目录对齐。 |
+| 10 未用参数 | **已处理** | deadnix 清零，并加入 `dev/lang/nix.nix` 工具集。statix 剩余均为风格项（空 pattern `{ ... }:`、重复 key）。 |
+| 11 Kuregumo 重复 boot | **已处理** | |
+| 12 inventory 可疑组合 | 已解决（2026-08-02） | |
+| 13 EDITOR | **已处理** | `dev/editor/editor.nix` 统一设 `EDITOR` / `VISUAL = nvim-lazy`；系统层只留 `vim` 给 root / 救机。 |
+| 13 darwin `@wheel` | **已处理** | |
+| 13 numtide cache | 不变 | 两边各写一份仍是正确做法（home 的 `substituters` 整体覆盖）。 |
+| 13 secrets | **未动** | 仍无任何 `sops.secrets` 声明，见 `trait/security/secrets/README.md` 待办。 |
+
+同次复查新发现并一并处理：
+
+- **工具覆盖按平台割裂**：yazi 只装在 nixos 系统层，而 `y` 函数注入了每个 home；fd / fzf / htop / btop 在
+  `system.tools` 的 `os` class，standalone home（philo）一个都没有；ghostty / neovim 系统层与 home 层各装一份。
+  现在 yazi / fzf 走 `dev/shell/util`（home-manager 自带 `y` wrapper），fd / htop / btop 走 `dev/tool`，
+  `system.tools` 只留 vim / curl / wget / tree。
+- **tmux `--disable-jemalloc` override 已过期**：nixpkgs 的 tmux 3.8 在 darwin 自己加了 `--enable-jemalloc`，
+  override 反而让所有平台从源码编译。已删除。
+- **nixos-wsl 模块被 import 进所有 nixos 主机**，而 inventory 里已没有 WSL 主机。改为只在 `virt == "wsl"` 时 import。
+- **niri-flake 的 home 模块默认用它自己从源码构建的 niri**，依赖钉得老，接通 home 侧后立刻撞上 nixpkgs 删掉的
+  `libdisplay-info_0_2`。改为 `programs.niri.package = pkgs.niri`，与系统侧同一个包。
+
+仍未处理：`home.theme` 选项（catppuccin 目前在 ghostty / tmux / starship / aerospace 各写一份）、secrets 整条链、
+三台 nixos 机器的硬件配置占位。
+
+---
+
+# 以下为 2026-07-27 原始审计记录
+
+
+---
+
 ## 一、真实缺陷
 
 当前被「所有 home 恰好一模一样」这一巧合掩盖，没有暴露成构建错误。

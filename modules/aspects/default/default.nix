@@ -12,12 +12,12 @@
       # 位置无所谓，放最前只是因为它是框架层的东西。
       den.policies.settings-injection
 
+      # 只放真正全体适用的：desktop / app 这类可选面向由 entity/hosts 显式 include。
       den.aspects.nix
       den.aspects.system
       den.aspects.security
       den.aspects.network
       den.aspects.dev
-      den.aspects.app
 
       den.provides.define-user
       den.provides.hostname

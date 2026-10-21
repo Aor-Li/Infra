@@ -1,6 +1,7 @@
 # Infra
 
-个人 Nix flake 配置，统一管理多台设备的 **NixOS / nix-darwin / WSL** 系统与 **home-manager** 家目录环境。
+个人 Nix flake 配置，统一管理多台设备的 **NixOS / nix-darwin** 系统与 **home-manager** 家目录环境
+（home-manager 一律 standalone 运行，可独立于系统单独 switch）。
 
 ## 整体架构
 
@@ -10,34 +11,47 @@
 
 ## 目录结构
 
+完整的归属规则见 [`AGENTS.md`](AGENTS.md)。
+
 ```
 modules/
-├── profile.nix     # 声明所有 host / user / home（设备清单，见下表）
+├── inventory.nix   # 设备清单：声明所有 host / user / home（见下表）
 ├── flakes/         # 配置 flake 本身：外部 input + 顶层 flakeModule（见该目录 README）
-├── metas/          # den 的 schema 定义（host / user 的选项，如 virt / role / distro）
-└── aspects/        # 实际配置内容
-    ├── entity/     # 具体实体：每个 host/user 目录含 default.nix 与可选 secrets.yaml
-    └── feature/    # 可复用特性：nix 设置、系统核心、按环境区分的模块等
+├── meta/           # 框架层：schema（host / home 的选项）与 aspect-settings
+└── aspects/
+    ├── default/    # 基线：所有实体都吃到的 den.default
+    ├── entity/     # 谁：hosts/ 与 users/，只声明身份 + include 哪些 trait
+    └── trait/      # 配什么：nix / system / network / security / desktop / dev / app / service
 ```
 
 ## 设备清单
 
-在 [`modules/profile.nix`](modules/profile.nix) 中定义：
+在 [`modules/inventory.nix`](modules/inventory.nix) 中定义：
 
-| 主机 | 平台 | 环境 | 角色 | 系统 |
-| --- | --- | --- | --- | --- |
-| Enten | x86_64-linux | physical | desktop | nixos |
-| Magatsumi | aarch64-darwin | physical | laptop | darwin |
-| Kuregumo | aarch64-linux | virtual | laptop | nixos |
-| Kumeyuri | x86_64-linux | wsl | desktop | nixos |
-| Tobimune | x86_64-linux | physical | server | nixos |
+| 主机 | 平台 | virt | 角色 | 系统 | include 的可选面向 |
+| --- | --- | --- | --- | --- | --- |
+| Enten | x86_64-linux | none | desktop | nixos | desktop + app |
+| Magatsumi | aarch64-darwin | none | laptop | darwin | aerospace + app |
+| Kumeyuri | aarch64-darwin | none | laptop | darwin | aerospace + app |
+| Kuregumo | aarch64-linux | vm | laptop | nixos | desktop + app |
+| Tobimune | x86_64-linux | none | server | nixos | （无） |
+| aor@philo | x86_64-linux | — | standalone home | Ubuntu | （无） |
 
 ## 常用命令
 
 ```console
+# 首次激活一台机器 / 一个 home
+./scripts/bootstrap.sh Enten          # nixos-rebuild + 对应的 home-manager switch
+./scripts/bootstrap.sh aor@philo      # 只有 home-manager
+
 # 修改 flake 依赖后，重新生成根 flake.nix
 nix run .#write-flake
 
 # 更新 den input
 nix flake update den
+
+# 静态检查
+nix run nixpkgs#deadnix -- modules
+nix run nixpkgs#statix -- check modules
+nix run nixpkgs#nixfmt -- --check $(git ls-files 'modules/*.nix')
 ```

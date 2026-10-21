@@ -63,13 +63,13 @@ in
       { }
     else
       throw ''
-    den: aspect 的 `settings` 只能放选项**声明**（mkOption），下面这些位置写成了赋值：
+        den: aspect 的 `settings` 只能放选项**声明**（mkOption），下面这些位置写成了赋值：
 
-    ${lib.concatMapStringsSep "\n" (p: "  ${p}") errors}
+        ${lib.concatMapStringsSep "\n" (p: "  ${p}") errors}
 
-    给实体填值请写实体路径，例如：
+        给实体填值请写实体路径，例如：
 
-      den.hosts.<system>.<Host>.settings.<aspect 路径> = ...;
-      den.homes.<system>."<user>@<host>".settings.<aspect 路径> = ...;
-  '';
+          den.hosts.<system>.<Host>.settings.<aspect 路径> = ...;
+          den.homes.<system>."<user>@<host>".settings.<aspect 路径> = ...;
+      '';
 }

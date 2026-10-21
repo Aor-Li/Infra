@@ -1,4 +1,0 @@
-{ den, ... }:
-{
-  den.aspects.service = {};
-}

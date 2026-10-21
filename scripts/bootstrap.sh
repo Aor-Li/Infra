@@ -10,8 +10,7 @@
 # "<user>@<name>", since home-manager here always runs standalone rather
 # than as a nixos/darwin module.
 #
-# macOS prerequisites: Lix must already be installed
-# (https://install.lix.systems); Homebrew is optional (skipped with a
+# macOS prerequisites: Nix must already be installed; Homebrew is optional (skipped with a
 # warning if missing). A working proxy is recommended for fetching flake
 # inputs from GitHub.
 set -euo pipefail
@@ -25,7 +24,7 @@ name="$1"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 flake="${repo_root}#${name}"
 
-# Inject the same nix.conf settings modules/aspects/trait/01-nix/conf.nix
+# Inject the same nix.conf settings modules/aspects/trait/nix/conf.nix
 # would apply, since a fresh machine hasn't switched once yet to have them.
 export NIX_CONFIG="experimental-features = nix-command flakes
 substituters = https://mirror.sjtu.edu.cn/nix-channels/store https://mirrors.ustc.edu.cn/nix-channels/store https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store https://nix-community.cachix.org https://cache.nixos.org/
