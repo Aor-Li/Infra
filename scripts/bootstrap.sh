@@ -6,9 +6,9 @@
 #   homeConfigurations, e.g. Enten (NixOS), Kumeyuri (nix-darwin), or
 #   aor@philo (standalone home-manager profile).
 #
-# For a nixos/darwin host this also switches any homeConfigurations named
-# "<user>@<name>", since home-manager here always runs standalone rather
-# than as a nixos/darwin module.
+# On nixos/darwin hosts home-manager runs as a system module, so the system
+# switch activates the users' homes too; homeConfigurations only holds
+# standalone profiles for machines without a den host.
 #
 # macOS prerequisites: Nix must already be installed; Homebrew is optional (skipped with a
 # warning if missing). A working proxy is recommended for fetching flake
@@ -35,29 +35,12 @@ has_attr() {
     | grep -qF "\"${name}\""
 }
 
-# Switch every homeConfigurations entry named "<user>@<name>" for this host.
-switch_matching_homes() {
-  local homes
-  homes="$(
-    nix eval --no-write-lock-file --json "${repo_root}#homeConfigurations" --apply builtins.attrNames 2>/dev/null \
-      | jq -r --arg suffix "@${name}" '.[] | select(endswith($suffix))'
-  )"
-  [ -z "$homes" ] && return 0
-  local home_name
-  while IFS= read -r home_name; do
-    echo "==> home-manager switch (${home_name})"
-    nix run home-manager -- switch --flake "${repo_root}#${home_name}"
-  done <<< "$homes"
-}
-
 if has_attr nixosConfigurations; then
   echo "==> nixos-rebuild switch (${name})"
   sudo --preserve-env=NIX_CONFIG nixos-rebuild switch --flake "$flake"
-  switch_matching_homes
 elif has_attr darwinConfigurations; then
   echo "==> nix-darwin switch (${name})"
   sudo --preserve-env=NIX_CONFIG nix run nix-darwin -- switch --flake "$flake"
-  switch_matching_homes
 elif has_attr homeConfigurations; then
   echo "==> home-manager switch (${name})"
   nix run home-manager -- switch --flake "$flake"

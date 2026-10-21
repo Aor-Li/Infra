@@ -16,10 +16,16 @@
     {
       os = cache;
 
-      # home 侧必须再写一次：nix/conf.nix 有意用整体覆盖的 `substituters`（见那里
-      # 关于镜像优先级的注释），而它同样作用于 homeManager，于是 ~/.config/nix/nix.conf
-      # 会把系统层合并出来的 numtide 顶掉——用户级配置比 /etc/nix/nix.conf 后读。
-      homeManager = cache;
+      # standalone home 必须再写一次：nix/conf.nix 有意用整体覆盖的 `substituters`（见那里
+      # 关于镜像优先级的注释），它会写进 ~/.config/nix/nix.conf，把这里的 numtide 顶掉。
+      # 作为系统模块时 HM 不写 nix.conf（同样见 conf.nix），系统层那份就够了。
+      homeManager =
+        {
+          lib,
+          osConfig ? null,
+          ...
+        }:
+        lib.mkIf (osConfig == null) cache;
 
       includes = [
         den.aspects.dev.ai.agent.claude

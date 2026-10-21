@@ -1,22 +1,21 @@
-{ ... }:
 {
-  den.aspects.dev.vcs.git =
-    { home, ... }:
-    {
-      nixos =
-        { pkgs, ... }:
-        {
-          environment.systemPackages = with pkgs; [
-            git
-          ];
-        };
+  den.aspects.dev.vcs.git = {
+    nixos =
+      { pkgs, ... }:
+      {
+        environment.systemPackages = with pkgs; [
+          git
+        ];
+      };
 
-      homeManager = {
+    homeManager =
+      { config, ... }:
+      {
         programs.git = {
           enable = true;
           settings = {
-            user.email = home.email;
-            user.name = home.fullname;
+            user.email = config.lib.owner.email;
+            user.name = config.lib.owner.fullname;
             # http.sslVerify = false;
             # https.sslVerify = false;
           };
@@ -29,5 +28,5 @@
           enableGitIntegration = true;
         };
       };
-    };
+  };
 }

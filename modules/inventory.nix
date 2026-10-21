@@ -1,15 +1,13 @@
 # 设备清单：声明所有 host / user / home。
 #
-# home 的 key 就是它的名字（den 自动拆成 userName@hostName），不用再写 name。
-# fullname / email 有全局默认值（meta/schema/home.nix），只有不一样的才写。
-#
-# home 侧的可选面向（desktop / app）不在这里 include，也不在 den.aspects.<Host> 上
-# include —— den 不会把 host 的 includes 推给 standalone home。写法见
-# entity/hosts/*/default.nix 里的 den.aspects."aor@<Host>"。
+# nixos / darwin 主机上的用户由 home-manager 模块管理（随系统 switch），不再单独声明
+# den.homes；den.homes 只留给没有 den host 的机器。
+# fullname / email 有全局默认值（meta/schema/identity.nix），只有不一样的才写：
+# host 上的用户写在 users.<name> 里，standalone home 写在 home 上。
 {
-  #####################
-  ### System + Home ###
-  #####################
+  ##############################
+  ### System + Home (module) ###
+  ##############################
 
   # main nixos pc
   den.hosts.x86_64-linux.Enten = {
@@ -18,7 +16,6 @@
     role = "desktop";
     users.aor = { };
   };
-  den.homes.x86_64-linux."aor@Enten" = { };
 
   # macbook pro
   den.hosts.aarch64-darwin.Magatsumi = {
@@ -27,18 +24,16 @@
     role = "laptop";
     users.aor = { };
   };
-  den.homes.aarch64-darwin."aor@Magatsumi" = { };
 
   # macbook air（公司机）
   den.hosts.aarch64-darwin.Kumeyuri = {
     virt = "none";
     distro = "darwin";
     role = "laptop";
-    users.aor = { };
-  };
-  den.homes.aarch64-darwin."aor@Kumeyuri" = {
-    fullname = "aor";
-    email = "liyifeng@philoai.com";
+    users.aor = {
+      fullname = "aor";
+      email = "liyifeng@philoai.com";
+    };
   };
 
   # macbook nixos vm with desktop
@@ -48,7 +43,6 @@
     role = "laptop";
     users.aor = { };
   };
-  den.homes.aarch64-linux."aor@Kuregumo" = { };
 
   # mini-pc
   den.hosts.x86_64-linux.Tobimune = {
@@ -58,11 +52,10 @@
     users.aor = { };
     settings.system.power.sleep.neverSleep = true;
   };
-  den.homes.x86_64-linux."aor@Tobimune" = { };
 
-  ############################################
-  ### Standard Alone Home-Manager Profiles ###
-  ############################################
+  ##########################################
+  ### Standalone Home-Manager Profiles   ###
+  ##########################################
 
   # 公司集群上的 Ubuntu 节点：没有对应 host，den 只合成 { name; system } 当 host 上下文
   den.homes.x86_64-linux."aor@philo" = {

@@ -30,15 +30,18 @@ modules/
 - 全体适用 → `aspects/default/default.nix` 的 `den.default.includes`
 - 个体差异 → `entity/hosts/<Host>/default.nix` 里显式 include
 
-home-manager 在本仓库一律 standalone 运行，而 den **不会把 host 的 includes 推给 standalone
-home**（这是设计，不是 bug）。所以一个可选面向要同时落到系统侧和 home 侧，entity 里要写两行：
+nixos / darwin 主机上的 home-manager 作为系统模块运行（随系统 switch 一起生效）。用户
+`aor` include 了 den 的 `host-aspects` battery，所以 host 上 include 的 trait 会同时把
+`nixos`/`darwin` class 落到系统、把 `homeManager` class 落到 `home-manager.users.aor`——
+entity 里写一行就够：
 
 ```nix
-den.aspects.Enten.includes       = [ den.aspects.desktop ];  # → nixosConfigurations.Enten
-den.aspects."aor@Enten".includes = [ den.aspects.desktop ];  # → homeConfigurations."aor@Enten"
+den.aspects.Enten.includes = [ den.aspects.desktop ];  # 系统侧 + home 侧
 ```
 
-同一个 trait 的 `nixos` / `homeManager` class 各自只在对应的 pipeline 里生效，重复 include 不会互相干扰。
+standalone（`den.homes`）只留给没有 den host 的机器（如集群上的 Ubuntu `aor@philo`）。
+trait 里只对 standalone 成立的配置（自己写 nix.conf、装 HM CLI 等）用
+`osConfig == null` 门控。
 
 方向性硬规则：**基线只放真正全体适用的东西，可选部分一律由 entity 加进来，
 绝不"全体加 + 个别减"**。Nix 的 module 系统里 include 容易、移除难，一旦基线
@@ -314,15 +317,12 @@ den.hosts.x86_64-linux.Tobimune.settings.system.power.sleep.neverSleep = true;
 
 | pipeline | 读谁 |
 | --- | --- |
-| `nixosConfigurations` / `darwinConfigurations` | `host.settings` |
-| `homeConfigurations` | `home.settings` |
+| `nixosConfigurations` / `darwinConfigurations`（含内嵌的 home-manager 用户） | `host.settings` |
+| `homeConfigurations`（standalone） | `home.settings` |
 
-所以系统层和 home 层都要用的开关，两边各写一次。这是刻意的——den 不会把 host
-的值传给 standalone home，硬造一层级联只会让"这个值到底从哪来"变得不可查。
-
-> home 侧受 [known-issues 问题 1](../docs/known-issues.md) 影响：同一 system 下
-> 共用 den 用户名的多个 home 会串味。在那个 bug 修掉之前，`home.settings` 只能
-> 全部写成一样的值，差异化开关一律走 host 侧。
+host 上的开关同时作用于系统层和该 host 的 home-manager 用户；只有 standalone home
+需要在 `den.homes` 上单独写。刻意不做 host → standalone home 的级联——den 不会把
+host 的值传给 standalone home，硬造一层只会让"这个值到底从哪来"变得不可查。
 
 **工作/个人的边界**（尚未落地，先记判据）：
 

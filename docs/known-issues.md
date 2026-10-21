@@ -47,6 +47,12 @@
 - **niri-flake 的 home 模块默认用它自己从源码构建的 niri**，依赖钉得老，接通 home 侧后立刻撞上 nixpkgs 删掉的
   `libdisplay-info_0_2`。改为 `programs.niri.package = pkgs.niri`，与系统侧同一个包。
 
+**2026-10-21 之后：nixos / darwin 主机的 home-manager 改为系统模块。** 用户 `aor` 默认
+`classes = [ "homeManager" ]` 并 include `host-aspects` battery，host 上的 include 直接同时落到系统侧与
+`home-manager.users.aor`；五个 `aor@<Host>` standalone home 与 entity 里的 `den.aspects."aor@<Host>"` 一并删除，
+只剩 `aor@philo`。问题 1 / 2 依赖的「多个 home 共用 den 用户名」场景因此不再存在；上面表格里关于
+`"aor@<Host>".includes` 的处理方式已过时。
+
 仍未处理：`home.theme` 选项（catppuccin 目前在 ghostty / tmux / starship / aerospace 各写一份）、secrets 整条链、
 三台 nixos 机器的硬件配置占位。
 

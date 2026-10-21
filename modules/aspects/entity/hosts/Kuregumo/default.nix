@@ -1,5 +1,5 @@
 # macbook nixos vm with desktop
-# 系统侧 / home 侧两行 include 的含义见 Enten/default.nix。
+# include 同时作用于系统侧与 home 侧，见 Enten/default.nix。
 { den, ... }:
 {
   den.aspects.Kuregumo = {
@@ -22,9 +22,4 @@
       };
     };
   };
-
-  den.aspects."aor@Kuregumo".includes = [
-    den.aspects.desktop
-    den.aspects.app
-  ];
 }

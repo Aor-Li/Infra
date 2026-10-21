@@ -28,7 +28,7 @@ in
     reservedKeys = [ "settings" ];
 
     # 声明侧。挂在 den.schema.conf 而不是 den.schema.host，因为 den 会把 conf 同时
-    # import 进 host / user / home 三种实体——standalone home-manager 也就跟着有了
+    # import 进 host / user / home 三种实体——standalone home（den.homes）也就跟着有了
     # 同一棵 settings 树。
     schema.conf.options.settings = lib.mkOption {
       type = lib.types.submodule [
@@ -43,14 +43,15 @@ in
     # `{ settings, ... }:` 就行，不用关心这次求值在 host 还是 home 的 pipeline 里，
     # 也不用写 `host.settings.<很长的路径>`。
     #
-    # 取值来源（本仓库 home-manager 走 standalone，两条 pipeline 是分开的）：
+    # 取值来源：
     #
     #   nixosConfigurations / darwinConfigurations —— ctx 里只有 host → host.settings
-    #   homeConfigurations                         —— ctx 里有 home  → home.settings
+    #     （host 内嵌的 home-manager 用户同样在这条 pipeline 里，也读 host.settings）
+    #   homeConfigurations（standalone）           —— ctx 里有 home  → home.settings
     #
-    # 即「谁产出这份配置就读谁的 settings」，刻意不做级联：同一个开关系统层和 home
-    # 层都要用的话，两边各写一次。`aor@philo` 这种没有对应 host 的 standalone home，
-    # den 只合成 `{ name = ...; }` 当 host 上下文，它没有 settings，正好落到 home。
+    # 即「谁产出这份配置就读谁的 settings」，刻意不做级联。`aor@philo` 这种没有对应
+    # host 的 standalone home，den 只合成 `{ name = ...; }` 当 host 上下文，它没有
+    # settings，正好落到 home。
     policies.settings-injection =
       {
         host ? null,

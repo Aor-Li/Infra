@@ -1,7 +1,8 @@
 # Infra
 
 个人 Nix flake 配置，统一管理多台设备的 **NixOS / nix-darwin** 系统与 **home-manager** 家目录环境
-（home-manager 一律 standalone 运行，可独立于系统单独 switch）。
+（nixos / darwin 主机上 home-manager 作为系统模块运行，随系统 switch 一起生效；
+没有 den host 的机器才用 standalone home）。
 
 ## 整体架构
 
@@ -41,7 +42,7 @@ modules/
 
 ```console
 # 首次激活一台机器 / 一个 home
-./scripts/bootstrap.sh Enten          # nixos-rebuild + 对应的 home-manager switch
+./scripts/bootstrap.sh Enten          # nixos-rebuild（home-manager 随系统一起激活）
 ./scripts/bootstrap.sh aor@philo      # 只有 home-manager
 
 # 修改 flake 依赖后，重新生成根 flake.nix

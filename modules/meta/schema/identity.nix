@@ -1,6 +1,12 @@
+# 「这份 home 属于谁、仓库 checkout 在哪」。
+#
+# 同一组选项同时挂在 user 与 home 两种实体上：nixos / darwin 主机上的用户由 host
+# 内嵌的 home-manager 模块产出（读 user），没有对应 host 的 standalone home（如
+# aor@philo）读 home。HM 侧统一经由 config.lib.{owner,repo} 取值（见
+# aspects/default/home.nix），trait 不用关心自己落在哪条 pipeline 里。
 { lib, ... }:
-{
-  den.schema.home.options = {
+let
+  options = {
     fullname = lib.mkOption {
       type = lib.types.str;
       default = "Aor-Li";
@@ -22,4 +28,8 @@
       description = "Absolute path of this repository's checkout on the machine; null means ~/Infra.";
     };
   };
+in
+{
+  den.schema.user.options = options;
+  den.schema.home.options = options;
 }
