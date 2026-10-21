@@ -76,5 +76,7 @@
     name = "aor@philo";
     fullname = "Aor-Li";
     email = "liyifeng@philoai.com";
+    # 服务器用途，不要 Music / Videos / Public 这些 XDG 用户目录
+    settings.system.xdg.userDirs = false;
   };
 }
