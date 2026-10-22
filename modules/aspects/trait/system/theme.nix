@@ -56,6 +56,9 @@ in
         # target 默认不看程序装没装都会写配置；rofi 的 target 还在写 HM 已改名的
         # programs.rofi.font，每次求值都报 rename 警告。没用 rofi，关掉。
         stylix.targets.rofi.enable = false;
+        # hyprland 的 target 同样不看 hyprland.enable 就写 settings，顺带读 configType
+        # 的默认值，stateVersion < 26.05 时每次求值都报 deprecation 警告。没用 hyprland，关掉。
+        stylix.targets.hyprland.enable = false;
       };
   };
 }
