@@ -351,3 +351,28 @@ host 的值传给 standalone home，硬造一层只会让"这个值到底从哪�
   `~/Infra`）和 `config.lib.repo.{root,link,path}` helper（`aspects/default/home.nix`）。链回仓库
   工作区的 out-of-store symlink 一律写 `config.lib.repo.link ./相对路径`——模块在仓库里的位置由
   helper 算出来，目录移动时链接自动跟着走。
+
+## 8. devenvs：项目级开发环境
+
+`devenvs/` 是 devenv 的内容，**不属于 den 的 aspect 树**，也不被 import-tree 导入（`modules/` 之外）。
+术语（Global / Modular / Project Dev Env、分析模式 / 构建模式）见 `GLOSSARY.md`；锁定与工具链的
+取舍见 `docs/adr/0001-devenvs-locking-and-toolchain.md`；操作步骤见 `devenvs/README.md`。
+
+```
+devenvs/
+├── modules/<m>/devenv.nix     Modular Dev Env，选项 aor.env.<m>.*
+└── projects/<name>/           Project Dev Env：devenv.{yaml,nix} + 锁定文件 + 该仓专用脚本
+```
+
+边界：
+
+- **`trait/dev/env/` vs `devenvs/`**：前者装工具（devenv 本体、shell hook、`devenv-deploy`），
+  后者是环境内容。trait 里不写任何具体项目的配置。
+- **Global Dev Env（`trait/dev/lang/`） vs Project Dev Env**：两者互不引用。Project Dev Env 激活后
+  覆盖 `CC` / `CXX` / `CLANGD_FLAGS` 等变量，Global 一侧不需要知道它的存在。
+- **平台降级归 Modular Dev Env**：Project Dev Env 里不写 `isDarwin` / `isLinux`，需要按模式分支时
+  读模块给出的事实（如 `config.aor.env.cuda.buildable`）。
+- **锁定以 Infra 为准**：Project Dev Env 的 input 一律写死 rev，Python 依赖锁在本目录的 `uv.lock`；
+  被绑定项目里的 `devenv.lock` 是缓存。
+- **一个仓库一个 Project Dev Env**：在上游仓库目录执行 `devenv-deploy <name>` 绑定，上游仓库里不放
+  devenv 配置文件。

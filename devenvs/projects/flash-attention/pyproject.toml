@@ -1,0 +1,43 @@
+# flash-attention 的 Python 依赖锁定（Project Dev Env 用，不是上游包）。
+# 版本取自上游 main CI 矩阵中的一格：py3.12 + torch 2.10.0 + CUDA 13.0（cu130 wheel）。
+# 改动后在本目录执行 `uv lock` 并提交 uv.lock。
+[project]
+name = "flash-attention-devenv"
+version = "0"
+requires-python = "==3.12.*"
+dependencies = [
+  "torch==2.10.0",
+  "einops",
+  "numpy", # torch 初始化时会尝试加载
+  # FA2 / FA3 的 setup.py 在顶层 import torch，必须 --no-build-isolation，构建依赖得预先装好
+  "setuptools==75.8.0", # 与上游 CI（_build.yml）一致
+  "wheel",
+  "packaging",
+  # ninja 不从 PyPI 装：manylinux 版 ninja 用宿主机 glibc，和环境里的 nix libstdc++ 冲突；用 cpp 模块提供的 nix 版
+  "psutil",
+  # 测试
+  "pytest",
+  "pytest-xdist",
+  # FA4（flash_attn/cute）：CuTeDSL 只有 Linux wheel
+  "nvidia-cutlass-dsl[cu13]>=4.6.2; sys_platform == 'linux'",
+  "apache-tvm-ffi>=0.1.11,<0.2; sys_platform == 'linux'",
+  "torch-c-dlpack-ext; sys_platform == 'linux'",
+  "quack-kernels>=0.5.3; sys_platform == 'linux'",
+  "typing_extensions",
+]
+
+[tool.uv]
+package = false
+environments = [
+  "sys_platform == 'linux'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+# Linux 取 CUDA 13.0 版 torch；macOS 取 PyPI 上的 CPU 版（分析模式只需要它的头文件与类型）。
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

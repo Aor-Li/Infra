@@ -1,0 +1,11 @@
+# flash-attention Project Dev Env。锁定以本目录为准：nixpkgs 写死 rev，Python 依赖见 uv.lock；
+# 被绑定项目目录里的 devenv.lock 只是缓存。
+inputs:
+  nixpkgs:
+    # 升级时换 rev，并确认 cache.nixos-cuda.org 有对应的 cudaPackages（darwin 只能替换下载，不能构建）
+    url: github:NixOS/nixpkgs/f20cd90e28fe0403873f473b29e42662cd86e8c4
+allow_unfree: true # CUDA
+imports:
+  - ../../modules/cpp
+  - ../../modules/cuda
+  - ../../modules/python
