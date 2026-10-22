@@ -127,7 +127,7 @@ trait/
 │   ├── vcs/                    git / lazygit / gh / delta / 签名
 │   ├── env/                    项目级环境：direnv / devenv / 开发容器 / 模板
 │   ├── ops/                    运维客户端：kubectl / k9s / terraform / 云 CLI
-│   ├── ai/                     agent 本体与私有接线（agent/）+ 共享资产（skill/ prompt/）
+│   ├── ai/                     一个 agent 一个叶子：本体与私有配置；skill 等资产由各 agent 自行管理
 │   └── tool/                   独立 CLI：调用完就结束、不与上面任何一环耦合
 │
 ├── app/                    问：这是哪一类日常应用？
@@ -341,7 +341,7 @@ host 的值传给 standalone home，硬造一层只会让"这个值到底从哪�
 - `_name/` 前缀表示**不参与 import-tree 自动导入**。**必须**加前缀的只有含 `.nix`
   的非模块目录——由特性入口显式 `import` 的 Nix helper（`meta/aspect-settings/_lib/`），
   以及可能夹带 `.nix` 的第三方载荷（`_lazyvim/`）。纯非 nix 载荷（dank 的 `dms/`、
-  ai 的 `skill/mine/`）本来就不会被导入，不加前缀，目录名直接说明它是什么。
+  ai 的 skill 载荷目录）本来就不会被导入，不加前缀，目录名直接说明它是什么。
   特性入口本身永远不加 `_`，继续由 import-tree 自动发现。
 - **预留槽位**（`terminal/` `prompt/` `multiplexer/` `vpn/` `browser/`）即使只有
   一个文件也建目录——它们是 API 的一部分，加第二个成员时零改动。

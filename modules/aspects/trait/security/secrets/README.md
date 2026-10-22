@@ -42,7 +42,7 @@ sops.secrets.anthropic_auth_token = { };
 
 - 目前**没有任何 aspect 声明 `sops.secrets`**：`entity/users/aor/secrets.yaml` 已存在但无人消费，
   hosts 下还没有任何 secrets.yaml。这条链现在只装了 age / sops 两个二进制。
-- [`dev/ai/agent/claude.nix`](../../dev/ai/agent/claude.nix) 的 provider 认证（`ANTHROPIC_AUTH_TOKEN`）
+- [`dev/ai/claude.nix`](../../dev/ai/claude.nix) 的 provider 认证（`ANTHROPIC_AUTH_TOKEN`）
   待接 sops。
 - [`network/tailscale.nix`](../../network/tailscale.nix) 待用 `authKeyFile` 免交互入网。
 - [`.sops.yaml`](.sops.yaml) 中系统级规则暂用 aor 个人 key，待各主机生成 age key 后按主机拆分。
