@@ -5,5 +5,6 @@
   den.aspects.Magatsumi.includes = [
     den.aspects.desktop.session.compositor.aerospace
     den.aspects.app
+    den.aspects.dev.editor.vscode
   ];
 }

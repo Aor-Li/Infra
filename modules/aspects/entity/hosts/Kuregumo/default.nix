@@ -6,6 +6,7 @@
     includes = [
       den.aspects.desktop
       den.aspects.app
+      den.aspects.dev.editor.vscode
     ];
 
     nixos = {

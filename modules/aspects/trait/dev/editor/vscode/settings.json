@@ -1,0 +1,406 @@
+{
+    // appearance：配色主题由 stylix 生成（扩展名 stylix.stylix），图标仍用 catppuccin
+    "workbench.iconTheme": "catppuccin-mocha",
+    "workbench.colorTheme": "Stylix",
+
+    // 本体与 nix 声明的扩展由 nix 锁定版本，不让 VS Code 自己更新
+    "update.mode": "none",
+    "extensions.autoUpdate": false,
+    "extensions.autoCheckUpdates": false,
+
+    // terminal
+    "terminal.integrated.stickyScroll.enabled": false, // for tmux
+
+    // ssh：保持持续连接
+    "terminal.integrated.enablePersistentSessions": true,
+    "terminal.integrated.persistentSessionReviveProcess": true,
+    
+    // 集成浏览器
+    "workbench.browser.enableRemoteProxy": true,
+    "workbench.browser.dataStorage": "workspace",
+
+    "claudeCode.preferredLocation": "panel",
+    "git.openRepositoryInParentFolders": "never",
+    "python.analysis.typeCheckingMode": "standard",
+    "editor.unicodeHighlight.nonBasicASCII": false,
+    "editor.fontFamily": "CaskaydiaCove Nerd Font, 等距更纱黑体 SC, Menlo, Monaco, 'Courier New', monospace",
+    "git.confirmSync": false,
+    
+    // Plugins
+    "windowColor.workspaceSettings": {
+        "/Users/aor/Infra": {
+            "name": "Infra",
+            "mainColor": "#d5ea39",
+            "isStatusBarColored": false,
+            "isWindowNameColored": true,
+            "isActiveItemsColored": true,
+            "setWindowTitle": true,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/analysis/h3": {
+            "name": "Analysis H3",
+            "mainColor": "#1beed2",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": true,
+            "setWindowTitle": true,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/spatial-sparse-attention": {
+            "name": "Spatial Sparse Attention",
+            "mainColor": "#f50505",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": true,
+            "setWindowTitle": true,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/prompt-injection-flow": {
+            "name": "Prompt Injection Flow",
+            "mainColor": "#cd18ac",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": true,
+            "setWindowTitle": true,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/projects/MiniMaxH3-Prompt-Pos-Test": {
+            "name": "MiniMaxH3-Prompt-Pos-Test",
+            "mainColor": "#b319d2",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/SGLang-SubBlock": {
+            "name": "SGLang-SubBlock",
+            "mainColor": "#d79223",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/deploy/20260902_h3_sf_dmd_balanced162k": {
+            "name": "20260902_h3_sf_dmd_balanced162k",
+            "mainColor": "#abf109",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/refact/framework-analysis": {
+            "name": "framework-analysis",
+            "mainColor": "#72f024",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/debug/new-kv-cache-mode": {
+            "name": "new-kv-cache-mode",
+            "mainColor": "#c017de",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/projects/MiniMaxH3-CausalMask-Glitch": {
+            "name": "MiniMaxH3-CausalMask-Glitch",
+            "mainColor": "#ec364f",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/projects/MiniMaxH3-Train-Stream-Diff": {
+            "name": "MiniMaxH3-Train-Stream-Diff",
+            "mainColor": "#640bea",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/nfs/shawks/forcing_learning/tmp/h3_data": {
+            "name": "h3_data",
+            "mainColor": "#2fee3c",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/nfs/aor/container/claude": {
+            "name": "claude",
+            "mainColor": "#fcb11d",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/h3-fa3-ops": {
+            "name": "h3-fa3-ops",
+            "mainColor": "#3d18b4",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/refactor/plan": {
+            "name": "Framework Refact Plan",
+            "mainColor": "#ca5502",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": true,
+            "setWindowTitle": true,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/ops_selector_rule": {
+            "name": "ops_selector_rule",
+            "mainColor": "#70ec36",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/improve_ops_config_method": {
+            "name": "improve_ops_config_method",
+            "mainColor": "#d33422",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/refactor/philoflow-v2-gen-h3": {
+            "name": "philoflow-v2-gen-h3",
+            "mainColor": "#da07cc",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/philoflow-v2-session-api": {
+            "name": "philoflow-v2-session-api",
+            "mainColor": "#dc6718",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/h3-parallel": {
+            "name": "h3-parallel",
+            "mainColor": "#af1d2e",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/fused_qk_rmsnrom_rope": {
+            "name": "fused_qk_rmsnrom_rope",
+            "mainColor": "#264eed",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/SubBlockAttn-Opt": {
+            "name": "SubBlockAttn-Opt",
+            "mainColor": "#8d18c3",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/philoflow-v2-sesssion": {
+            "name": "philoflow-v2-sesssion",
+            "mainColor": "#0444d7",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/deploy": {
+            "name": "deploy",
+            "mainColor": "#6b38e0",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-monorepo/feat/sol-attn": {
+            "name": "sol-attn",
+            "mainColor": "#67dc28",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-v2-monorepo/refactor/migrate-h3-to-inference": {
+            "name": "migrate-h3-to-inference",
+            "mainColor": "#01da01",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-v2-monorepo/feat/h3-opt": {
+            "name": "h3-opt",
+            "mainColor": "#02dea4",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-v2-monorepo/deploy/guide-page-opt": {
+            "name": "guide-page-opt",
+            "mainColor": "#15d515",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-v2-monorepo/main": {
+            "name": "main",
+            "mainColor": "#a615c6",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-v2-monorepo/deploy/inference_deploy/packages/philoflow-v2-runtime-session": {
+            "name": "philoflow-v2-runtime-session",
+            "mainColor": "#0853e7",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-v2-monorepo/feat/L1-API": {
+            "name": "L1-API",
+            "mainColor": "#01f41d",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor": {
+            "name": "aor",
+            "mainColor": "#11d0b3",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-v2-monorepo/feat/h3-backend-opt": {
+            "name": "h3-backend-opt",
+            "mainColor": "#a949e4",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/home/aor/repos/philoflow-v2-monorepo/feat/l1-api-opt": {
+            "name": "l1-api-opt",
+            "mainColor": "#e5aa15",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        },
+        "/Users/aor/Projects/flash-attention": {
+            "name": "flash-attention",
+            "mainColor": "#d5e006",
+            "isStatusBarColored": false,
+            "isWindowNameColored": false,
+            "isActiveItemsColored": false,
+            "setWindowTitle": false,
+            "isActivityBarColored": false,
+            "isTitleBarColored": false
+        }
+    },
+    "windowColor.workspaces": [
+        {
+            "directory": "/Users/aor/Infra"
+        },
+        {
+            "directory": "/home/aor/repos/philoflow-monorepo/analysis/h3"
+        },
+        {
+            "directory": "/home/aor/repos/philoflow-monorepo/feat/spatial-sparse-attention"
+        },
+        {
+            "directory": "/home/aor/repos/philoflow-monorepo/feat/prompt-injection-flow"
+        },
+        {
+            "directory": "/home/aor/repos/philoflow-monorepo/refactor/plan"
+        }
+    ],
+    "gitlens.mode.active": "zen",
+    "explorer.confirmDragAndDrop": false,
+    "liveServer.settings.donotVerifyTags": true,
+    "liveServer.settings.donotShowInfoMsg": true,
+    "claudeCode.hideOnboarding": true,
+    "editor.fontSize": 14,
+    "terminal.integrated.fontSize": 14,
+}
