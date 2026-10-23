@@ -35,6 +35,7 @@
         enable = true;
         profiles.default.extensions = with marketplace; [
           # 外观
+          catppuccin.catppuccin-vsc
           catppuccin.catppuccin-vsc-icons
           lennardv.set-window-color-name
 

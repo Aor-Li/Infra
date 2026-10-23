@@ -1,11 +1,12 @@
 {
     // appearance：配色主题由 stylix 生成（扩展名 stylix.stylix），图标仍用 catppuccin
     "workbench.iconTheme": "catppuccin-mocha",
-    "workbench.colorTheme": "Stylix",
+    // 临时：试用官方 Catppuccin 主题（stylix 的 base16 映射让外框偏亮），切回改成 "Stylix"
+    "workbench.colorTheme": "Catppuccin Mocha",
 
     // 本体与 nix 声明的扩展由 nix 锁定版本，不让 VS Code 自己更新
     "update.mode": "none",
-    "extensions.autoUpdate": false,
+    "extensions.autoUpdate": "off",
     "extensions.autoCheckUpdates": false,
 
     // terminal
