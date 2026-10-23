@@ -1,4 +1,7 @@
-# 问：这台机器常驻提供什么？——目前还没有任何常驻服务，预留顶层槽位。
+# 问：这台机器常驻提供什么？——不进基线，由 entity 按需 include 具体叶子。
+{ den, ... }:
 {
-  den.aspects.service = { };
+  den.aspects.service.includes = [
+    den.aspects.service.remote
+  ];
 }

@@ -1,6 +1,10 @@
-# 关掉它你会失去：Claude Code CLI 本体。
+# 关掉它你会失去：Claude Code CLI 本体与 Claude 桌面客户端。
 { inputs, ... }:
 {
+  den.aspects.dev.ai.claude.darwin = {
+    homebrew.casks = [ "claude" ];
+  };
+
   den.aspects.dev.ai.claude.homeManager =
     { pkgs, ... }:
     let

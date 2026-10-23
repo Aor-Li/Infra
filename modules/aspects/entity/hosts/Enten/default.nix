@@ -10,6 +10,7 @@
       den.aspects.desktop
       den.aspects.app
       den.aspects.dev.editor.vscode
+      den.aspects.service.remote.sunshine
     ];
 
     nixos = {
