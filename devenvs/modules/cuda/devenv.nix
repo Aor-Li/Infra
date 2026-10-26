@@ -61,6 +61,8 @@ let
     cp.cuda_nvcc
     cp.cuda_cudart
     (cp.cccl or cp.cuda_cccl)
+    # clang 的 CUDA 运行时包装头无条件 include curand_mtgp32_kernel.h：没有它 clangd 一个 .cu 都解析不了
+    (headersOf cp.libcurand)
   ]
   ++ lib.optional (cp ? cuda_crt) cp.cuda_crt
   ++ lib.optional (cp ? cuda_profiler_api) cp.cuda_profiler_api;
@@ -69,7 +71,9 @@ let
 
   cudaHome = pkgs.symlinkJoin {
     name = "cuda-home-${cfg.version}";
-    paths = core ++ map headersOf selected ++ lib.optionals buildable (map libsOf selected);
+    paths = lib.unique (
+      core ++ map headersOf selected ++ lib.optionals buildable (map libsOf selected)
+    );
     # torch.utils.cpp_extension 链接时用 $CUDA_HOME/lib64。
     postBuild = ''
       if [ -d $out/lib ] && [ ! -e $out/lib64 ]; then ln -s lib $out/lib64; fi
@@ -88,13 +92,22 @@ let
     '') cfg.driverLibDirs
   );
 
-  # 给 clang 系工具（clangd）的 CUDA 参数。nvcc 专用参数不在这里。
+  # 给 clang 系工具（clangd）的 CUDA 参数：clang 读 CUDA 源码的完整"方言"，nvcc 专用参数不在这里。
+  # - 不加 -nocudalib：clang 驱动只在链接 libdevice 的那条路径上给 device 侧 cc1 传 -target-sdk-version，
+  #   加了之后 device 侧会把 CUDA 当成 9.2 以前的版本，`<<<>>>` 找 cudaConfigureCall 而报错。
+  #   libdevice 在 cuda_nvcc 包里（nvvm/libdevice），两个平台都是纯文件，不缺。
+  # - __CUDACC_VER_*：nvcc 自己定义的版本宏，cutlass 等头文件直接按它们分支（cute/config.hpp 等），clang 不定义，补上。
+  # - include/cccl：CUDA >= 13 把 cub / thrust / libcu++ 挪到了这个子目录，nvcc 由 nvcc.profile 加，clang 要显式给。
+  cudaVersionParts = lib.splitString "." cfg.version;
   clangCudaArgs = [
     "--cuda-path=${cudaHome}"
-    "-nocudalib"
     "--no-cuda-version-check"
     "-Wno-unknown-cuda-version"
-  ];
+    "-D__CUDACC_VER_MAJOR__=${lib.elemAt cudaVersionParts 0}"
+    "-D__CUDACC_VER_MINOR__=${lib.elemAt cudaVersionParts 1}"
+    "-D__CUDACC_VER_BUILD__=0"
+  ]
+  ++ lib.optional (lib.versionAtLeast cfg.version "13") "-isystem${cudaHome}/include/cccl";
 
   # clang 看到的 host 侧头文件：显式给出宿主 gcc 的 libstdc++ 与 glibc，和 nvcc + gcc 构建时一致，
   # 也不依赖 clangd 包装器按 nix 的 cc-wrapper 补进来的那套（darwin 上是 libc++）。
