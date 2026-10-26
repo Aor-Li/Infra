@@ -9,3 +9,4 @@ imports:
   - ../../modules/cpp
   - ../../modules/cuda
   - ../../modules/python
+  - ../../modules/cutlass

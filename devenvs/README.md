@@ -4,9 +4,12 @@
 
 ```
 devenvs/
-├── modules/     Modular Dev Env：cpp / cuda / python，选项在 aor.env.<name>
+├── modules/     Modular Dev Env：cpp / cuda / python / cutlass，选项在 aor.env.<name>
 └── projects/    Project Dev Env：一个代码仓一个目录，版本全部锁定
 ```
+
+cutlass 既是模块也是项目：`modules/cutlass` 给 kernel 项目提供锁定版本的头文件路径与 CuTe DSL 的 editable
+安装，`projects/cutlass` 是 cutlass 自己的开发环境（模块指向自己的 checkout）。
 
 ## 绑定一个代码仓
 
@@ -45,6 +48,8 @@ darwin 上的 CUDA 头文件只能从 `cache.nixos-cuda.org` 替换下载，无�
 ## 新建 Project Dev Env
 
 1. 新建 `projects/<name>/devenv.yaml`：nixpkgs 写死 rev，按需 import `../../modules/<m>`。
+   用 cutlass 的 kernel 项目再声明一个 input：`cutlass: { url: github:NVIDIA/cutlass/<rev>, flake: false }`，
+   `aor.env.cutlass.src` 默认就取它；上游已 vendor 子模块的项目把 `src` 指向子模块。
 2. 新建 `projects/<name>/devenv.nix`：设置 `aor.env.<m>.*`，再补上该仓库特有的 env 和 tasks，以及 `enterTest`。
    `enterTest` 按 `config.aor.env.cuda.buildable` 等模块给出的事实区分模式，自己不写平台判断。
 3. 有 Python 依赖时：新建 `pyproject.toml`（`[tool.uv] package = false`），把

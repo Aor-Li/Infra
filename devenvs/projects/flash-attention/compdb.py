@@ -1,9 +1,9 @@
 """为 flash-attention 合成 clangd 用的 compile_commands.json（不需要先构建）。
 
-把 setup.py / hopper/setup.py 里的 include 路径、宏、C++ 标准翻译成 clang 的 CUDA 方言：
-nvcc 专用参数（--expt-*、-gencode、--threads ...）一律不出现，clangd 才不会报不认识的参数。
-两个平台共用这一份；平台差异（CUDA_HOME 的内容、macOS 上的 host 目标替换）都由 cuda 模块
-通过 CUDA_HOME / CUDA_CLANG_ARGS / CUDA_CLANG_HOST_ARGS 给出。
+只翻译 setup.py / hopper/setup.py 里的东西：include 路径、宏、C++ 标准；nvcc 专用参数
+（--expt-*、-gencode、--threads ...）一律不出现，clangd 才不会报不认识的参数。
+clang 读 CUDA 的方言（头文件路径、nvcc 版本宏、macOS 上的 host 目标替换）由 cuda 模块通过
+CUDA_CLANG_ARGS / CUDA_CLANG_HOST_ARGS 给出，csrc/cutlass 的 -I 由 cutlass 模块通过 CUTLASS_CLANG_ARGS 给出。
 
 用法：python compdb.py <仓库根> <输出目录>   （由 Project Dev Env 的 fa:compdb task 调用）
 """
@@ -45,8 +45,7 @@ def main() -> None:
     torch_inc = purelib / "torch" / "include"
     if not torch_inc.is_dir():
         sys.exit(f"compdb: 找不到 torch 头文件 {torch_inc}（venv 还没同步？）")
-    cutlass_inc = root / "csrc" / "cutlass" / "include"
-    if not (cutlass_inc / "cutlass" / "cutlass.h").is_file():
+    if not (Path(os.environ["CUTLASS_PATH"]) / "include" / "cutlass" / "cutlass.h").is_file():
         sys.exit("compdb: csrc/cutlass 子模块未初始化：git submodule update --init csrc/cutlass")
 
     # macOS 的 CPU wheel 缺这个 cmake 生成的头（Linux 的 CUDA wheel 里有）：按 pytorch 的
@@ -63,12 +62,9 @@ def main() -> None:
         f"-isystem{torch_inc}",
         f"-isystem{torch_inc / 'torch' / 'csrc' / 'api' / 'include'}",
         f"-isystem{sysconfig.get_paths()['include']}",
-        f"-I{cutlass_inc}",
+        *shlex.split(os.environ["CUTLASS_CLANG_ARGS"]),
         *shim_inc,
     ]
-    cccl = Path(cuda_home) / "include" / "cccl"  # CUDA >= 13 的 cccl 布局
-    if cccl.is_dir():
-        common_inc.append(f"-isystem{cccl}")
 
     clang = shutil.which("clang++") or "clang++"
 
@@ -84,7 +80,8 @@ def main() -> None:
             arch = next((a for s, a in ARCH_BY_SUFFIX.items() if src.name.endswith(s)), DEFAULT_ARCH)
             lang = cuda_args(arch)
         else:
-            lang = ["-x", "c++", *host_clang, f"-isystem{cuda_home}/include"]
+            # 普通 C++ 源文件看不到 --cuda-path，CUDA 头文件路径要显式给；cccl 子目录取 cuda 模块已经算好的那条。
+            lang = ["-x", "c++", *host_clang, f"-isystem{cuda_home}/include", *[a for a in cuda_clang if a.startswith("-isystem")]]
         args = [clang, *lang, CXX_STD, *TORCH_DEFINES, f"-DTORCH_EXTENSION_NAME={ext_name}", *extra, *common_inc, "-c", str(src)]
         return {"directory": str(root), "file": str(src), "arguments": args}
 

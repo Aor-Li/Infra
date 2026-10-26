@@ -1,0 +1,33 @@
+# cutlass 的 Python 依赖锁定（Project Dev Env 用，不是上游包）。
+# CuTe DSL 版本跟上游 python/CuTeDSL/requirements-cu13.txt 走（当前 4.8.1）；上游升版本时同步这里。
+# 改动后在本目录执行 `uv lock` 并提交 uv.lock。
+[project]
+name = "cutlass-devenv"
+version = "0"
+requires-python = "==3.12.*"
+dependencies = [
+  # CuTe DSL 元包：带上 MLIR 运行库（libs-base / cu13）。`dsl:install` 再把纯 Python 的 libs-core
+  # 换成仓库 python/CuTeDSL 的 editable 安装。只有 Linux wheel。
+  "nvidia-cutlass-dsl[cu13]==4.8.1; sys_platform == 'linux'",
+  # DSL 的示例与测试用 torch 管张量；Linux 取 cu130 wheel，macOS 取 CPU 版（分析模式只需类型）
+  "torch==2.10.0",
+  "numpy",
+  "setuptools", # dsl:install 用 --no-build-isolation，editable 后端要在 venv 里找到它
+  "pytest",
+  "typing_extensions",
+]
+
+[tool.uv]
+package = false
+environments = [
+  "sys_platform == 'linux'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

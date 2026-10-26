@@ -10,6 +10,7 @@
 }:
 let
   cuda = config.aor.env.cuda;
+  cutlass = config.aor.env.cutlass;
   state = config.devenv.state;
   compdbDir = "${state}/compdb";
 
@@ -17,7 +18,9 @@ let
   faArchs = lib.concatMapStringsSep ";" (lib.replaceStrings [ "." ] [ "" ]) cuda.archs;
 
   # 生成器或 CUDA 参数变了 compdb 就重新生成；上游增删源文件后手动 `devenv tasks run fa:compdb`。
-  compdbStamp = builtins.hashString "sha256" "${./compdb.py} ${lib.concatStringsSep " " cuda.clangArgs}";
+  compdbStamp = builtins.hashString "sha256" "${./compdb.py} ${
+    lib.concatStringsSep " " (cuda.clangArgs ++ cutlass.clangArgs)
+  }";
   compdb = ''
     python ${./compdb.py} "$DEVENV_ROOT" "${compdbDir}"
     echo ${compdbStamp} > "${compdbDir}/stamp"
@@ -64,6 +67,12 @@ in
       "curand"
       "nvml"
     ];
+  };
+
+  # 上游 vendor 了 cutlass 子模块，版本跟上游走；DSL 直接用 wheel（pyproject 里的 nvidia-cutlass-dsl），不 editable
+  aor.env.cutlass = {
+    enable = true;
+    src = "${config.devenv.root}/csrc/cutlass";
   };
 
   aor.env.python = {
