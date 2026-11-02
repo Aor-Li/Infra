@@ -22,6 +22,9 @@
           autoUpdate = true;
           upgrade = true;
           cleanup = "zap";
+          # brew bundle 默认只在每个 cask 完成后打一行，下载/升级期间整段静默，
+          # 看起来像激活卡死；--verbose 让下载进度和每个子命令实时输出。
+          extraFlags = [ "--verbose" ];
         };
       };
 
