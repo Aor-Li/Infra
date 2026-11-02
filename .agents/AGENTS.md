@@ -116,7 +116,7 @@ trait/
 │   │   ├── shell.nix               bash/fish/zsh 本体、通用别名、会话变量
 │   │   ├── prompt/                 starship
 │   │   ├── terminal/               ghostty / wezterm
-│   │   ├── multiplexer/            tmux / zellij / herdr
+│   │   ├── multiplexer/            tmux / zellij / herdr / rex
 │   │   └── util/                   带 shell 集成的 CLI：zoxide / atuin / fzf / eza / yazi
 │   ├── editor/                 写代码的地方（EDITOR/VISUAL 在 editor.nix 统一定义）
 │   │   ├── neovim/                 + _lazyvim/
