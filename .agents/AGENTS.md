@@ -97,7 +97,7 @@ trait/
 │   ├── firewall.nix
 │   ├── ssh.nix                 客户端配置与 sshd
 │   ├── vpn/                    tailscale / wireguard / 公司 VPN
-│   └── proxy.nix               ★ host 所有权差异的着力点之一
+│   └── proxy/                  ★ host 所有权差异的着力点之一：clash（分流 + netsel）/ ssh-direct
 │
 ├── security/               问：谁能访问什么？
 │   ├── secrets/                sops：密钥分发的唯一来源
