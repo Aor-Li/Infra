@@ -65,5 +65,23 @@
     settings.system.xdg.userDirs = false;
     # hwstat 默认探测 dgx0001 … dgx0031
     settings.dev.ops.hwstat.hosts = map (i: "dgx" + lib.fixedWidthNumber 4 i) (lib.range 1 31);
+    # 个人 GPU 资源（A/B 组划分同 arena 约定），其余可访问的卡在 hwstat 里算作「借用」
+    settings.dev.ops.hwstat.groups = [
+      {
+        section = "个人";
+        name = "A 组";
+        cards = [ "dgx0019" "dgx0020" ];
+      }
+      {
+        section = "个人";
+        name = "B 组";
+        cards = [ "dgx0028" "dgx0030" ];
+      }
+      {
+        section = "个人";
+        name = "辅助";
+        cards = [ "dgx0026:0-1" ];
+      }
+    ];
   };
 }
