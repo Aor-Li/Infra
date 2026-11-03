@@ -2,6 +2,7 @@
 #
 # 远端只需要 bash / top / ps（以及可选的 nvidia-smi），不需要装任何东西；连不上的主机单独报告。
 # 默认主机列表来自 settings，命令行参数可临时覆盖：`hwstat dgx0001 dgx0005`。
+# 每卡画成两格字形（利用率 / 显存，颜色 = 用户）；`-v` 逐卡文字明细，`-w 5` 每 5 秒原地刷新。
 { lib, ... }:
 {
   den.aspects.dev.ops.hwstat = {

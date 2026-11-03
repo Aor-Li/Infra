@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import time
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -37,9 +38,8 @@ fi
 
 # GPU 被视为空闲：无计算进程、利用率为 0、显存占用低于此值（MiB）
 IDLE_MEM_MIB = 1024
-# 用户 CPU 占用低于此核数不显示，过滤噪声
+# -v 模式下用户 CPU 占用低于此核数不显示，过滤噪声
 CPU_USER_MIN_CORES = 0.5
-SPARK = "▁▂▃▄▅▆▇█"
 
 
 class Style:
@@ -131,66 +131,12 @@ def ranges(idxs):
     return ",".join(out)
 
 
-def gib(b):
-    return f"{b / 2**30:.0f}"
-
-
-def summarize(r, st):
-    """返回 (cells, users_text, idle_gpus)"""
-    cpu = r["cpu"]
-    cpu_cell = st.level(f"{cpu:3.0f}%" if cpu is not None else "  ?", cpu) + f"/{r['nproc']}c"
-    load_cell = f"{r['load']:.1f}" if r["load"] is not None else "?"
-    if r["mem"]:
-        total, avail = r["mem"]
-        pct = 100 * (total - avail) / total if total else None
-        mem_cell = st.level(f"{gib(total - avail)}/{gib(total)}G", pct)
-    else:
-        mem_cell = "?"
-
-    uuid_idx = {g["uuid"]: g["idx"] for g in r["gpus"]}
-    gpu_users = {}
-    busy = set()
-    for uuid, pid in r["apps"]:
-        idx = uuid_idx.get(uuid)
-        if idx is None:
-            continue
-        busy.add(idx)
-        gpu_users.setdefault(r["pid_user"].get(pid, "?"), set()).add(idx)
-
-    gpus = sorted(r["gpus"], key=lambda g: g["idx"])
-    if gpus:
-        utils = [g["util"] or 0 for g in gpus]
-        avg = sum(utils) / len(utils)
-        spark = "".join(st.level(SPARK[min(int(u / 100 * len(SPARK)), len(SPARK) - 1)], u)
-                        for u in utils)
-        idle = [g["idx"] for g in gpus
-                if g["idx"] not in busy and not g["util"] and (g["used"] or 0) < IDLE_MEM_MIB]
-        used = sum(g["used"] or 0 for g in gpus) / 1024
-        total = sum(g["total"] or 0 for g in gpus) / 1024
-        gpu_cell = st.level(f"{avg:3.0f}%", avg) + f" {spark}"
-        free_cell = st(f"{len(idle)}/{len(gpus)}", "1;32" if idle else "2")
-        gmem_cell = st.level(f"{used:.0f}/{total:.0f}G", 100 * used / total if total else None)
-    else:
-        idle = []
-        # 有 nvidia-smi 但查不到设备：驱动 / 容器透传异常，值得注意
-        gpu_cell = st("无 GPU", "2") if not r["has_gpu"] else st("nvidia-smi 无设备", "33")
-        free_cell = gmem_cell = ""
-
-    users = []
-    names = set(gpu_users) | {u for u, c in r["cpu_users"].items() if c / 100 >= CPU_USER_MIN_CORES}
-    # GPU 占用多的排前，其次按 CPU
-    for name in sorted(names, key=lambda u: (-len(gpu_users.get(u, ())), -r["cpu_users"].get(u, 0))):
-        parts = []
-        if name in gpu_users:
-            parts.append(f"GPU {ranges(gpu_users[name])}")
-        cores = r["cpu_users"].get(name, 0) / 100
-        if cores >= CPU_USER_MIN_CORES:
-            parts.append(f"{cores:.1f}c")
-        users.append(f"{st(name, '1')}({' '.join(parts)})")
-    return [cpu_cell, load_cell, mem_cell, gpu_cell, free_cell, gmem_cell], " ".join(users), idle
-
-
 ANSI = re.compile(r"\033\[[0-9;]*m")
+SPARK = "▁▂▃▄▅▆▇█"
+EIGHTHS = " ▏▎▍▌▋▊▉"
+# 用户配色（256 色），按区分度从高到低排；刻意避开表示负载等级的红 / 黄 / 绿
+PALETTE = ["38;5;33", "38;5;208", "38;5;201", "38;5;51", "38;5;141", "38;5;180", "38;5;217", "38;5;111"]
+UNKNOWN = "38;5;250"  # 卡被占用但看不到进程属主（容器内进程等）
 
 
 def width(s):
@@ -201,9 +147,178 @@ def pad(s, w):
     return s + " " * (w - width(s))
 
 
+def host_ranges(hosts):
+    """['dgx0001','dgx0002','dgx0005','foo'] -> 'dgx0001-0002,0005 foo'"""
+    groups, order = {}, []
+    for h in hosts:
+        m = re.fullmatch(r"(.*?)(\d+)", h)
+        key = m.group(1) if m else h
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        if m:
+            groups[key].append(m.group(2))
+    out = []
+    for key in order:
+        nums = groups[key]
+        if not nums:
+            out.append(key)
+            continue
+        w = len(nums[0])
+        parts = ranges([int(n) for n in nums]).split(",")
+        fmt = [("-".join(f"{int(x):0{w}d}" for x in p.split("-"))) for p in parts]
+        out.append(key + ",".join(fmt))
+    return " ".join(out)
+
+
+def bar(pct, n, st):
+    """水平条：n 格宽，1/8 格精度，空余部分是暗色轨道。"""
+    if pct is None:
+        return st("?".ljust(n), "2")
+    eighths = round(max(0.0, min(pct, 100.0)) / 100 * n * 8)
+    full, rem = divmod(eighths, 8)
+    filled = "█" * full + (EIGHTHS[rem] if rem else "")
+    return st.level(filled, pct) + st("░" * (n - len(filled)), "2")
+
+
+def spark(frac):
+    return SPARK[max(0, min(len(SPARK) - 1, int(frac * len(SPARK) - 1e-9)))]
+
+
+class Colors:
+    """用户 -> 颜色。占卡多的用户先挑色，保证同屏最显眼的几位颜色互相区分最大。"""
+
+    def __init__(self, cards):
+        order = sorted(cards, key=lambda n: (-cards[n], n))
+        self.map = {n: PALETTE[i % len(PALETTE)] for i, n in enumerate(n for n in order if n != "?")}
+
+    def __getitem__(self, name):
+        return self.map.get(name, UNKNOWN)
+
+
+def analyze(r):
+    """整理成渲染需要的结构：每张卡的占用者、空闲卡、GPU 用户。"""
+    uuid_idx = {g["uuid"]: g["idx"] for g in r["gpus"]}
+    owners = {}  # idx -> [user]
+    for uuid, pid in r["apps"]:
+        idx = uuid_idx.get(uuid)
+        if idx is None:
+            continue
+        name = r["pid_user"].get(pid, "?")
+        if name not in owners.setdefault(idx, []):
+            owners[idx].append(name)
+    gpus = sorted(r["gpus"], key=lambda g: g["idx"])
+    idle = [g["idx"] for g in gpus
+            if g["idx"] not in owners and not g["util"] and (g["used"] or 0) < IDLE_MEM_MIB]
+    gpu_users = {}
+    for idx, names in owners.items():
+        for n in names:
+            gpu_users.setdefault(n, set()).add(idx)
+    r.update(gpus=gpus, owners=owners, idle=idle, gpu_users=gpu_users)
+    if r["mem"] and r["mem"][0]:
+        total, avail = r["mem"]
+        r["mem_pct"] = 100 * (total - avail) / total
+    else:
+        r["mem_pct"] = None
+    return r
+
+
+def gpu_cells(r, st, colors):
+    """每张卡两个字形：利用率高度 + 显存高度，颜色 = 占用者；空闲卡是暗色 ··。"""
+    cells = []
+    for g in r["gpus"]:
+        if g["idx"] in r["idle"]:
+            cells.append(st("··", "2"))
+            continue
+        names = r["owners"].get(g["idx"], ["?"])
+        color = colors[names[0]]
+        if len(names) > 1:
+            color += ";4"  # 多人共用一张卡：加下划线
+        u = spark((g["util"] or 0) / 100)
+        m = spark((g["used"] or 0) / g["total"]) if g["total"] else "?"
+        cells.append(st(u + m, color))
+    return cells
+
+
+def detail_lines(r, st, colors):
+    """-v：逐卡文字明细 + CPU 用户。"""
+    lines = []
+    for g in r["gpus"]:
+        if g["idx"] in r["idle"]:
+            continue
+        names = r["owners"].get(g["idx"], ["?"])
+        util = f"{g['util']:.0f}%" if g["util"] is not None else "N/A"
+        mem = f"{(g['used'] or 0) / 1024:.0f}/{(g['total'] or 0) / 1024:.0f}G"
+        who = " ".join(st(n, colors[n]) for n in names)
+        lines.append(f"GPU{g['idx']} {util:>4} {mem:>8}  {who}")
+    cpu = [(u, c / 100) for u, c in r["cpu_users"].items() if c / 100 >= CPU_USER_MIN_CORES]
+    if cpu:
+        cpu.sort(key=lambda x: -x[1])
+        lines.append("CPU  " + "  ".join(f"{u} {c:.1f}c" for u, c in cpu))
+    return lines
+
+
+def render(results, args, st):
+    ok = [(h, analyze(r)) for h, r, err in results if not err]
+    failed = [(h, err) for h, _, err in results if err]
+    cards = {}
+    for _, r in ok:
+        for n, ix in r["gpu_users"].items():
+            cards[n] = cards.get(n, 0) + len(ix)
+    colors = Colors(cards)
+
+    hw = max([4] + [len(h) for h, _ in ok])
+    ncard = max([0] + [len(r["gpus"]) for _, r in ok])
+    gpu_w = max(3 * ncard - 1, 3)
+    bw = 8
+    out = []
+
+    gpu_head = " ".join(f"{i:<2}" for i in range(ncard)) if ncard else "GPU"
+    head = "  ".join([pad("HOST", hw), pad("CPU", bw + 5), pad("MEM", bw + 5), pad(gpu_head, gpu_w), "FREE  USERS"])
+    out.append(st(head.rstrip(), "1"))
+
+    idle_total = 0
+    for host, r in ok:
+        cpu = bar(r["cpu"], bw, st) + f"{r['cpu']:4.0f}%" if r["cpu"] is not None else pad("?", bw + 5)
+        mem = bar(r["mem_pct"], bw, st) + f"{r['mem_pct']:4.0f}%" if r["mem_pct"] is not None else pad("?", bw + 5)
+        if r["gpus"]:
+            gpus = " ".join(gpu_cells(r, st, colors))
+            n_idle = len(r["idle"])
+            idle_total += n_idle
+            free = st(f"{n_idle}/{len(r['gpus'])}", "1;32" if n_idle else "2")
+        else:
+            gpus = st("无 GPU", "2") if not r["has_gpu"] else st("nvidia-smi 无设备", "33")
+            free = ""
+        users = sorted(r["gpu_users"].items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        utext = "  ".join(st(n, colors[n]) + " " + st(ranges(ix), "2") for n, ix in users)
+        line = "  ".join([pad(host, hw), cpu, mem, pad(gpus, gpu_w), pad(free, 4), utext])
+        out.append(line.rstrip())
+        if args.verbose:
+            out.extend(" " * (hw + 2) + st("│ ", "2") + ln for ln in detail_lines(r, st, colors))
+
+    out.append("")
+    summary = f"在线 {len(ok)}/{len(results)} 台，空闲 GPU {st(str(idle_total), '1;32')} 张"
+    legend = "每卡两格 = 利用率 / 显存（▁→█），颜色 = 用户，下划线 = 多人共用，·· = 空闲"
+    out.append(summary)
+    out.append(st(legend, "2"))
+    by_err = {}
+    for h, err in failed:
+        by_err.setdefault(re.sub(r"^\S+@\S+?:\s*", "", err).rstrip("."), []).append(h)
+    for err, hs in sorted(by_err.items(), key=lambda kv: -len(kv[1])):
+        out.append(st(f"✗ {len(hs)} 台 {err}：", "31") + st(host_ranges(hs), "2"))
+    return out, bool(failed)
+
+
+def collect(hosts, args):
+    with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        return list(ex.map(lambda h: probe(h, args.timeout), hosts))
+
+
 def main():
     ap = argparse.ArgumentParser(description="并发查看一组主机的 CPU / GPU 使用情况与占用用户。")
     ap.add_argument("hosts", nargs="*", help=f"要查询的主机（默认：{len(DEFAULT_HOSTS)} 台预设主机）")
+    ap.add_argument("-v", "--verbose", action="store_true", help="逐卡列出利用率 / 显存 / 用户，以及 CPU 用户")
+    ap.add_argument("-w", "--watch", type=float, metavar="SEC", help="每 SEC 秒刷新一次（Ctrl-C 退出）")
     ap.add_argument("-j", "--jobs", type=int, default=32, help="并发 ssh 数（默认 32）")
     ap.add_argument("-t", "--timeout", type=int, default=30, help="单台主机超时秒数（默认 30）")
     ap.add_argument("--no-color", action="store_true", help="关闭颜色")
@@ -214,49 +329,29 @@ def main():
         ap.error("没有预设主机，请在参数中给出主机名")
     st = Style(not args.no_color and sys.stdout.isatty() and "NO_COLOR" not in os.environ)
 
-    if sys.stderr.isatty():
-        print(f"正在探测 {len(hosts)} 台主机…", end="\r", file=sys.stderr, flush=True)
-    with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
-        results = list(ex.map(lambda h: probe(h, args.timeout), hosts))
-    if sys.stderr.isatty():
-        print(" " * 40, end="\r", file=sys.stderr, flush=True)
+    if not args.watch:
+        if sys.stderr.isatty():
+            print(f"正在探测 {len(hosts)} 台主机…", end="\r", file=sys.stderr, flush=True)
+        results = collect(hosts, args)
+        if sys.stderr.isatty():
+            print("\033[2K", end="\r", file=sys.stderr, flush=True)
+        lines, failed = render(results, args, st)
+        print("\n".join(lines))
+        return 1 if failed else 0
 
-    header = ["HOST", "CPU", "LOAD", "MEM", "GPU UTIL", "FREE", "GPU MEM", "USERS"]
-    rows, failed, idle_total = [], [], []
-    for host, r, err in results:
-        if err:
-            rows.append((host, None, err))
-            failed.append(host)
-        else:
-            cells, users, idle = summarize(r, st)
-            rows.append((host, cells, users))
-            if idle:
-                idle_total.append((host, idle))
-
-    ok_rows = [c for _, c, _ in rows if c]
-    widths = [max([len(header[0])] + [len(h) for h, _, _ in rows])]
-    for i in range(6):
-        widths.append(max([len(header[i + 1])] + [width(c[i]) for c in ok_rows]))
-
-    sep = "  "
-    print(st(sep.join(pad(h, w) for h, w in zip(header, widths + [0])).rstrip(), "1;4"))
-    for host, cells, tail in rows:
-        if cells is None:
-            print(pad(host, widths[0]) + sep + st(f"✗ {tail}", "31"))
-        else:
-            line = sep.join(pad(c, w) for c, w in zip([host] + cells, widths))
-            print((line + sep + tail).rstrip())
-
-    n_idle = sum(len(i) for _, i in idle_total)
-    print()
-    summary = f"可连接 {len(hosts) - len(failed)}/{len(hosts)}"
-    if failed:
-        summary += st(f"，失败 {len(failed)}", "31")
-    summary += f"；空闲 GPU 共 {st(str(n_idle), '1;32')} 张"
-    if idle_total:
-        summary += "：" + "  ".join(f"{h}[{ranges(i)}]" for h, i in idle_total)
-    print(summary)
-    return 1 if failed else 0
+    sys.stdout.write("\033[2J")
+    try:
+        while True:
+            t0 = time.time()
+            lines, _ = render(collect(hosts, args), args, st)
+            stamp = st(time.strftime("%H:%M:%S") + f"  每 {args.watch:g}s 刷新，Ctrl-C 退出", "2")
+            # 光标归位后覆盖重画，避免整屏清空带来的闪烁
+            sys.stdout.write("\033[H" + "\n".join(ln + "\033[K" for ln in [stamp] + lines) + "\033[J")
+            sys.stdout.flush()
+            time.sleep(max(0.0, args.watch - (time.time() - t0)))
+    except KeyboardInterrupt:
+        print()
+        return 0
 
 
 if __name__ == "__main__":
