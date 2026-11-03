@@ -65,6 +65,7 @@
     settings.system.xdg.userDirs = false;
     # hwstat 默认探测 dgx0001 … dgx0031
     settings.dev.ops.hwstat.hosts = map (i: "dgx" + lib.fixedWidthNumber 4 i) (lib.range 1 31);
+    settings.dev.ops.hwstat.arenaRegistry = "/nfs/aor/arena/registry";
     # 个人 GPU 资源（A/B 组划分同 arena 约定），其余可访问的卡在 hwstat 里算作「借用」
     settings.dev.ops.hwstat.groups = [
       {

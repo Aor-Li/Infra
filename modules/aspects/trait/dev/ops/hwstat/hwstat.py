@@ -1,17 +1,21 @@
 """hwstat: 并发 ssh 到一组主机，汇总 CPU / 内存 / GPU 使用情况与占用用户。"""
 
 import argparse
+import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 DEFAULT_HOSTS = json.loads(r"""@HOSTS@""")
 GROUPS = json.loads(r"""@GROUPS@""")
+ARENA_REGISTRY = json.loads(r'''@ARENA@''')  # arena registry 目录（null = 不读），--tasks 用
 
 # 在远端执行（bash -s 从 stdin 读）。只输出带标签的行，由本地解析；
 # top 取第二帧才是真实的瞬时占用，并且只打印 %CPU > 0 的进程以减少传输量。
@@ -33,6 +37,27 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   printf '%s\n' "$apps" | sed -n 's/^/APP /p'
   pids=$(printf '%s\n' "$apps" | awk -F', *' 'NF >= 2 {print $2}' | paste -sd, -)
   [ -n "$pids" ] && ps -o pid=,user= -p "$pids" 2>/dev/null | sed 's/^ */PS /'
+  # 自己的 GPU 进程：沿父进程往上找同名（同一程序）的最顶层祖先当作「任务」，报告它的工作目录和命令行。
+  # multiprocessing / torchrun 的 worker 因此能归到启动它的入口进程。
+  me=$(id -un)
+  for pid in $(printf '%s' "$pids" | tr , ' '); do
+    [ "$(ps -o user= -p "$pid" 2>/dev/null)" = "$me" ] || continue
+    root=$pid
+    chain=$pid
+    comm=$(ps -o comm= -p "$pid")
+    while :; do
+      pp=$(ps -o ppid= -p "$root" 2>/dev/null | tr -d ' ')
+      [ -n "$pp" ] && [ "$pp" -gt 1 ] && [ "$(ps -o comm= -p "$pp")" = "$comm" ] || break
+      root=$pp
+      chain="$chain,$pp"
+    done
+    # 中间层进程（如编排脚本拉起的各角色）的 pid 也要报，arena 登记常记的是它们
+    echo "JPIDS $root $chain"
+    echo "JOB $pid $root $(readlink "/proc/$root/cwd" 2>/dev/null)"
+    printf 'JCMD %s ' "$root"
+    tr '\0' ' ' < "/proc/$root/cmdline" 2>/dev/null | cut -c1-2000
+    echo
+  done
 else
   echo "NOGPU"
 fi
@@ -80,7 +105,8 @@ def probe(host, timeout):
 
 def parse(out):
     r = {"nproc": 0, "load": None, "mem": None, "cpu": None,
-         "cpu_users": {}, "gpus": [], "apps": [], "pid_user": {}, "has_gpu": True}
+         "cpu_users": {}, "gpus": [], "apps": [], "pid_user": {}, "has_gpu": True,
+         "job_of": {}, "job_cwd": {}, "job_cmd": {}, "job_pids": {}}
     for line in out.splitlines():
         tag, _, rest = line.partition(" ")
         f = rest.split()
@@ -106,6 +132,15 @@ def parse(out):
                 r["apps"].append((uuid, pid))
             elif tag == "PS":
                 r["pid_user"][f[0]] = f[1]
+            elif tag == "JOB":
+                pid, root, *cwd = rest.split(" ", 2)
+                r["job_of"][pid] = root
+                r["job_cwd"][root] = cwd[0].strip() if cwd else ""
+            elif tag == "JPIDS":
+                r["job_pids"].setdefault(f[0], set()).update(f[1].split(","))
+            elif tag == "JCMD":
+                root, _, cmd = rest.partition(" ")
+                r["job_cmd"][root] = cmd.strip()
             elif tag == "NOGPU":
                 r["has_gpu"] = False
         except (ValueError, IndexError):
@@ -208,6 +243,29 @@ class Colors:
         return self.map.get(name, UNKNOWN)
 
 
+PY_FLAG = re.compile(r"-[BbdEhiIOqsSuvVx]+$")
+TASK_NAME_MAX = 24
+
+
+def task_name(cmd):
+    """简短任务名：程序名（python 换成脚本名 / -m 模块的最后一段）+ 第一个位置参数（常是子命令）。"""
+    toks = cmd.split()
+    if not toks:
+        return "?"
+    prog, rest = os.path.basename(toks[0]), toks[1:]
+    if prog.startswith("python"):
+        while rest and PY_FLAG.match(rest[0]):
+            rest.pop(0)
+        if len(rest) >= 2 and rest[0] == "-m":
+            prog, rest = rest[1].rsplit(".", 1)[-1], rest[2:]
+        elif rest and not rest[0].startswith("-"):
+            prog, rest = os.path.basename(rest[0]), rest[1:]
+    name = prog
+    if rest and not rest[0].startswith("-") and "/" not in rest[0] and "=" not in rest[0]:
+        name += " " + rest[0]
+    return name if len(name) <= TASK_NAME_MAX else name[:TASK_NAME_MAX - 1] + "…"
+
+
 def analyze(r):
     """补上每张卡的占用者、是否空闲，以及内存占用率。"""
     uuid_idx = {g["uuid"]: g["idx"] for g in r["gpus"]}
@@ -219,7 +277,21 @@ def analyze(r):
         name = r["pid_user"].get(pid, "?")
         if name not in owners.setdefault(idx, []):
             owners[idx].append(name)
+    jobs = {}  # 任务根进程 pid -> {root, gpus, pids, cwd, cmd, name}
+    for uuid, pid in r["apps"]:
+        root = r["job_of"].get(pid)
+        if root is None or uuid not in uuid_idx:
+            continue
+        cmd = r["job_cmd"].get(root, "")
+        j = jobs.setdefault(root, {"root": root, "gpus": set(), "pids": {root}, "cwd": r["job_cwd"].get(root, ""),
+                                   "cmd": cmd, "name": task_name(cmd)})
+        j["gpus"].add(uuid_idx[uuid])
+        j["pids"].add(pid)
+        j["pids"] |= r["job_pids"].get(root, set())
+    r["jobs"] = sorted(jobs.values(), key=lambda j: min(j["gpus"]))
+    job_of_card = {i: j for j in r["jobs"] for i in j["gpus"]}
     for g in r["gpus"]:
+        g["job"] = job_of_card.get(g["idx"])
         g["owners"] = owners.get(g["idx"], [])
         g["idle"] = not g["owners"] and not g["util"] and (g["used"] or 0) < IDLE_MEM_MIB
     r["gpus"].sort(key=lambda g: g["idx"])
@@ -323,17 +395,23 @@ def render(hosts, results, args, st):
                     cards[n] = cards.get(n, 0) + 1
     colors = Colors(cards)
 
-    def card_cells(g):
+    def task_cell(g, prev):
+        j = g["job"]
+        if not j:
+            return ""
+        return st("〃", "2") if prev is j else st(j["name"], "1")
+
+    def card_cells(g, prev=None):
         mem = f"{(g['used'] or 0) / 1024:.0f}/{(g['total'] or 0) / 1024:.0f}G"
         mem_pct = 100 * (g["used"] or 0) / g["total"] if g["total"] else None
         util = f"{g['util']:.0f}%" if g["util"] is not None else "N/A"
         idx = f"{g['idx']:>3}"
         if g["idle"]:
             return [idx, bar(0, BAR_W, st, True) + st(f"{util:>5}", "2"),
-                    bar(mem_pct, BAR_W, st, True) + " " + st(f"{mem:>7}", "2"), st("空闲", "1;32")]
+                    bar(mem_pct, BAR_W, st, True) + " " + st(f"{mem:>7}", "2"), st("空闲", "1;32"), ""]
         who = ",".join(st(n, colors[n]) for n in (g["owners"] or ["?"]))
         return [idx, bar(g["util"], BAR_W, st) + st.level(f"{util:>5}", g["util"]),
-                bar(mem_pct, BAR_W, st) + " " + f"{mem:>7}", who]
+                bar(mem_pct, BAR_W, st) + " " + f"{mem:>7}", who, task_cell(g, prev)]
 
     def host_rows(host, r, err, gpus):
         """一台主机的若干行（不含第 1 列）。主机列：主机名 / cpu / mem。"""
@@ -347,17 +425,17 @@ def render(hosts, results, args, st):
         if not r["gpus"]:
             rows = [[st("无 GPU", "2") if not r["has_gpu"] else st("nvidia-smi 无设备", "33")]]
         else:
-            rows = [card_cells(g) for g in gpus]
+            rows = [card_cells(g, gpus[i - 1]["job"] if i else None) for i, g in enumerate(gpus)]
         if args.verbose:
             cpu = sorted(((u, c / 100) for u, c in r["cpu_users"].items() if c / 100 >= CPU_USER_MIN_CORES),
                          key=lambda x: -x[1])
             if cpu:
                 rows.append([st("CPU 用户  " + "  ".join(f"{u} {c:.1f}c" for u, c in cpu), "2")])
         while len(rows) < len(side):
-            rows.append(["", "", "", ""])
+            rows.append(["", "", "", "", ""])
         return [[side[i] if i < len(side) else ""] + cells for i, cells in enumerate(rows)]
 
-    table = Table(["分组", "主机", "GPU", "利用率", "显存", "用户"], st)
+    table = Table(["分组", "主机", "GPU", "利用率", "显存", "用户", "任务"], st)
     free_by = {}
     for section, name, members in groups:
         borrow = section == BORROW
@@ -382,7 +460,7 @@ def render(hosts, results, args, st):
         if not rows:
             rows.append(([st("（无）", "2")], None))
         while len(rows) < len(label):
-            rows.append((["", "", "", "", ""], None))
+            rows.append((["", "", "", "", "", ""], None))
         for i, (cells, r) in enumerate(rows):
             table.add([label[i] if i < len(label) else ""] + cells, "full" if i == 0 else r)
 
@@ -399,6 +477,193 @@ def render(hosts, results, args, st):
     return out, bool(failed)
 
 
+def load_claims():
+    """读 arena registry 当前占用（不含 archive/）：host -> [claim]。只要带 gpus 的登记。"""
+    claims = {}
+    if not ARENA_REGISTRY:
+        return claims
+    for path in sorted(glob.glob(os.path.join(ARENA_REGISTRY, "*.md"))):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                m = re.match(r"---\n(.*?)\n---", fh.read(), re.S)
+        except OSError:
+            continue
+        if not m:
+            continue
+        meta = {}
+        for ln in m.group(1).splitlines():
+            k, sep, v = ln.partition(":")
+            if sep:
+                meta[k.strip()] = v.strip()
+        try:
+            gpus = {int(x) for x in meta.get("gpus", "").split(",") if x.strip()}
+            expires = datetime.fromisoformat(meta["expires"]) if meta.get("expires") else None
+        except ValueError:
+            continue
+        if gpus and meta.get("host"):
+            claims.setdefault(meta["host"], []).append({
+                "gpus": gpus, "pid": meta.get("pid", ""), "title": meta.get("title", ""),
+                "agent": meta.get("agent", ""), "expires": expires, "resource": meta.get("resource", "")})
+    return claims
+
+
+def wrap(text, w):
+    """按显示宽度折行。优先在空格处断，长词（路径）在 / - _ , 之后断，实在不行硬断。"""
+    lines, cur = [], ""
+    words = []
+    for word in re.split(r"(?<= )", text):
+        # 选项名和它的取值不拆开：取值太长时在取值内部的 / 处断行
+        if words and words[-1].startswith("-") and len(words[-1]) <= 24 and words[-1].endswith(" ") \
+                and not words[-1].strip().endswith(("/", ")")) and " " not in words[-1].strip():
+            words[-1] += word
+        else:
+            words.append(word)
+    for word in words:
+        if width(cur + word) <= w:
+            cur += word
+            continue
+        if cur.strip():
+            lines.append(cur.rstrip())
+            cur = ""
+        while width(word) > w:
+            cut, acc = 0, 0
+            for i, c in enumerate(word):
+                acc += 2 if unicodedata.east_asian_width(c) in "WF" else 1
+                if acc > w:
+                    break
+                if c in "/-_,":
+                    cut = i + 1
+            cut = cut or max(1, i)
+            lines.append(word[:cut])
+            word = word[cut:]
+        cur = word
+    if cur.strip() or not lines:
+        lines.append(cur.rstrip())
+    return lines
+
+
+def split_cmd(cmd, cwd):
+    """命令行拆成 (解释器, [行])：程序 + 位置参数一行，之后每个 --选项 连同取值一行；
+    工作目录下的路径改写成 ./ 相对路径，连续重复的同名选项折叠成一行。"""
+    toks = cmd.split()
+    if not toks:
+        return "", ["?"]
+    exe, toks = toks[0], toks[1:]
+    if cwd and cwd != "/":
+        toks = [t.replace(cwd.rstrip("/") + "/", "./") for t in toks]
+    head, opts = [os.path.basename(exe)], []
+    for t in toks:
+        if t.startswith("--") or (opts and t.startswith("-") and len(t) == 2 and not head[-1:] == ["-m"]):
+            opts.append([t])
+        elif opts:
+            opts[-1].append(t)
+        else:
+            head.append(t)
+    lines = [" ".join(head)]
+    i = 0
+    while i < len(opts):
+        k = i
+        while k + 1 < len(opts) and opts[k + 1][0] == opts[i][0]:
+            k += 1
+        if k - i >= 2:  # 同一选项连续出现 3 次以上：只留第一条，其余计数
+            lines.append(" ".join(opts[i]) + f"  （另有 {k - i} 个 {opts[i][0]}）")
+        else:
+            lines += [" ".join(o) for o in opts[i:k + 1]]
+        i = k + 1
+    return exe, lines
+
+
+def render_tasks(hosts, results, args, st):
+    """--tasks：每个自己的 GPU 任务一个块，列出工作目录 / 命令 / 解释器 / 对应的 arena 登记。
+
+    登记与任务的对应：pid 精确命中优先；没有命中时退而按卡号重叠，但只认未过期的登记。
+    """
+    now = datetime.now(timezone.utc)
+    claims = load_claims()
+    by_host = {h: r for h, r, err in results if not err}
+    term = shutil.get_terminal_size((120, 24)).columns if sys.stdout.isatty() else 120
+    label_w = 7
+
+    def live(c):
+        return not c["expires"] or c["expires"] >= now
+
+    def claim_meta(c):
+        bits = [c["agent"]] if c["agent"] else []
+        if c["expires"] and not live(c):
+            return st(" · ".join(bits + ["已过期"]), "31")
+        if c["expires"]:
+            bits.append("至 " + c["expires"].astimezone().strftime("%m-%d %H:%M"))
+        return st(" · ".join(bits), "32")
+
+    def block(gutter, header, right, fields):
+        """header 行 + 若干 (标签, [行], 续行缩进) 字段，左侧一条彩色竖线。"""
+        g = st("│", gutter)
+        right_w = width(right)
+        gap = " " * max(1, term - 3 - width(header) - right_w) if right else ""
+        out = [st("╭─ ", gutter) + header + gap + right]
+        body_w = max(20, term - 2 - label_w)
+        for label, values, hang in fields:
+            # 首行顶格，其余（后续取值与折行）统一多缩进 hang 列
+            pieces = [p for v in values for p in wrap(v, body_w - hang)]
+            for k, piece in enumerate(pieces):
+                lead = pad(st(label, "2"), label_w) if k == 0 else " " * (label_w + hang)
+                out.append(f"{g} {lead}{piece}")
+        out.append(st("╰─", gutter))
+        return out
+
+    out, used, tasks = [], set(), []
+    for host in hosts:
+        r = by_host.get(host)
+        if not r:
+            continue
+        analyze(r)
+        hc = claims.get(host, [])
+        for j in r["jobs"]:
+            hit = [c for c in hc if c["pid"] in j["pids"]] or [c for c in hc if live(c) and c["gpus"] & j["gpus"]]
+            used.update(id(c) for c in hit)
+            tasks.append((host, j, hit))
+
+    n_gpu = sum(len(j["gpus"]) for _, j, _ in tasks)
+    unclaimed = sum(1 for _, _, hit in tasks if not hit)
+    orphan = [(h, c) for h in hosts for c in claims.get(h, []) if id(c) not in used and h in by_host]
+    alive = [(h, c) for h, c in orphan if live(c)]
+    stale = len(orphan) - len(alive)
+
+    summary = [f"自己的 GPU 任务 {st(str(len(tasks)), '1')} 个，共 {st(str(n_gpu), '1')} 卡"]
+    if unclaimed:
+        summary.append(st(f"{unclaimed} 个未在 arena 登记", "33"))
+    if alive:
+        summary.append(st(f"{len(alive)} 条登记没见到进程", "33"))
+    out += ["，".join(summary), ""]
+
+    for host, j, hit in tasks:
+        exe, cmd_lines = split_cmd(j["cmd"], j["cwd"])
+        header = st(host, "1") + "  " + st(f"GPU {ranges(j['gpus'])}", "36") + "  " + st(j["name"], "1")
+        fields = [("目录", [j["cwd"] or "?"], 0), ("命令", cmd_lines, 2)]
+        if exe and "/" in exe:
+            fields.append(("环境", [exe], 0))
+        if hit:
+            for c in hit:
+                title = c["title"].replace(j["cwd"].rstrip("/") + "/", "./") if j["cwd"] else c["title"]
+                fields.append(("arena", [claim_meta(c), title], 0))
+        else:
+            fields.append(("arena", [st("未登记", "33")], 0))
+        out += block("36" if hit else "33", header, st(f"pid {j['root']}", "2"), fields)
+        out.append("")
+    if not tasks:
+        out += [st("没有自己的 GPU 任务", "2"), ""]
+
+    for h, c in alive:
+        header = st(h, "1") + "  " + st(f"GPU {ranges(c['gpus'])}", "36") + "  " + st("登记了但没见到进程", "1;33")
+        fields = [("arena", [claim_meta(c), c["title"]], 0), ("释放", [f"arena release {c['resource']}"], 0)]
+        out += block("33", header, "", fields)
+        out.append("")
+    if stale:
+        out.append(st(f"arena 中另有 {stale} 条已过期、且对不上任何进程的 GPU 登记，建议 release", "33"))
+    failed = [h for h, _, err in results if err]
+    return out, bool(failed)
+
+
 def collect(hosts, args):
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
         return list(ex.map(lambda h: probe(h, args.timeout), hosts))
@@ -408,6 +673,7 @@ def main():
     ap = argparse.ArgumentParser(description="并发查看一组主机的 GPU（每卡一行，按个人 / 借用分组）与 CPU 使用情况。")
     ap.add_argument("hosts", nargs="*", help=f"要查询的主机（默认：{len(DEFAULT_HOSTS)} 台预设主机 + 分组里的主机）")
     ap.add_argument("-f", "--free", action="store_true", help="借用组只显示空闲卡")
+    ap.add_argument("-T", "--tasks", action="store_true", help="改为逐个列出自己的 GPU 任务：完整命令 / 工作目录 / arena 登记")
     ap.add_argument("-v", "--verbose", action="store_true", help="附带每台主机的 CPU 用户")
     ap.add_argument("-w", "--watch", type=float, metavar="SEC", help="每 SEC 秒刷新一次（Ctrl-C 退出）")
     ap.add_argument("-j", "--jobs", type=int, default=32, help="并发 ssh 数（默认 32）")
@@ -427,7 +693,7 @@ def main():
         results = collect(hosts, args)
         if sys.stderr.isatty():
             print("\033[2K", end="\r", file=sys.stderr, flush=True)
-        lines, failed = render(hosts, results, args, st)
+        lines, failed = (render_tasks if args.tasks else render)(hosts, results, args, st)
         print("\n".join(lines))
         return 1 if failed else 0
 
@@ -435,7 +701,7 @@ def main():
     try:
         while True:
             t0 = time.time()
-            lines, _ = render(hosts, collect(hosts, args), args, st)
+            lines, _ = (render_tasks if args.tasks else render)(hosts, collect(hosts, args), args, st)
             stamp = st(time.strftime("%H:%M:%S") + f"  每 {args.watch:g}s 刷新，Ctrl-C 退出", "2")
             # 光标归位后覆盖重画，避免整屏清空带来的闪烁
             sys.stdout.write("\033[H" + "\n".join(ln + "\033[K" for ln in [stamp] + lines) + "\033[J")
