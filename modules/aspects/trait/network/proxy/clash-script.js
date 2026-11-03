@@ -1,6 +1,8 @@
-// Clash Verge 全局扩展脚本模板（由 netsel setup 生成，勿手改）。`netsel setup` 把 __SUBS__ 替换成从 Verge 订阅里读出的
+// Clash Verge 全局扩展脚本模板（由 netsel setup 生成，勿手改）。`netsel setup` 把下面 SUBS 的占位符替换成从 Verge 订阅里读出的
 // [{ name, key, url }]，写到 Verge 的 profiles/Script.js（全局脚本，对任何激活的订阅都生效）。
 // 订阅链接含 token，只出现在生成后的文件里，不进仓库。
+// 占位符只能在代码里出现一次：替换是纯文本的，写进注释会把多行 JSON 漏到注释外面，脚本语法错误后
+// Verge 会静默退回原始订阅。脚本跑在 Verge 内嵌的 JS 引擎里，不要依赖 URL 等宿主 API。
 //
 // 不管激活的是哪份订阅，这里都丢掉它自带的节点 / 分组 / 规则，改用 proxy-providers 同时拉取
 // 所有订阅，再按下面三条线分流：
@@ -53,7 +55,7 @@ function main(config) {
     ]),
   ];
 
-  const subHosts = SUBS.map((s) => new URL(s.url).hostname);
+  const subHosts = SUBS.map((s) => s.url.replace(/^[a-z]+:\/\//i, "").split(/[/?#:]/)[0]);
   const rules = [
     ...DGX_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},DGX`),
     ...subHosts.map((h) => `DOMAIN,${h},DIRECT`),

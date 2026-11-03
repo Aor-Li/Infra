@@ -473,7 +473,10 @@ def cmd_setup(restart=True):
         print(f"已更新：{what}")
 
     if was_running:
-        subprocess.run(["/usr/bin/open", "-g", "-a", "Clash Verge"])
+        # open 拉起的 App 继承调用方环境；activation 的 PATH 里没有 /usr/sbin，Verge 的 set_dns.sh
+        # 会因找不到 scutil 而没接管系统 DNS——TUN 下只剩裸 IP 连接，按域名的分流全部落空。
+        env = dict(os.environ, PATH="/usr/bin:/bin:/usr/sbin:/sbin")
+        subprocess.run(["/usr/bin/open", "-g", "-a", "Clash Verge"], env=env)
         api = Api()
         if wait(lambda: probe(api), 30):
             print("Clash Verge 已重启，新配置生效。")
