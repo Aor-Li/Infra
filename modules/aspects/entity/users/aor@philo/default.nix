@@ -7,5 +7,7 @@
   den.aspects."aor@philo".includes = [
     # 常驻个人 Rex server，Mac 端经 SSH 隧道连入（见 multiplexer/rex.nix）
     den.aspects.dev.shell.multiplexer.rex
+    # 集群节点 CPU / GPU 占用一览，主机列表见 inventory
+    den.aspects.dev.ops.hwstat
   ];
 }

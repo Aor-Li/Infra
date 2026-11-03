@@ -4,6 +4,7 @@
 # den.homes；den.homes 只留给没有 den host 的机器。
 # fullname / email 有全局默认值（meta/schema/identity.nix），只有不一样的才写：
 # host 上的用户写在 users.<name> 里，standalone home 写在 home 上。
+{ lib, ... }:
 {
   ##############################
   ### System + Home (module) ###
@@ -62,5 +63,7 @@
     email = "liyifeng@philoai.com";
     # 服务器用途，不要 Music / Videos / Public 这些 XDG 用户目录
     settings.system.xdg.userDirs = false;
+    # hwstat 默认探测 dgx0001 … dgx0031
+    settings.dev.ops.hwstat.hosts = map (i: "dgx" + lib.fixedWidthNumber 4 i) (lib.range 1 31);
   };
 }
