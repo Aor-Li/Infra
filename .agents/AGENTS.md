@@ -17,7 +17,7 @@ modules/
 ├── inventory.nix  设备清单：声明所有 host / user / home
 └── aspects/
     ├── default/   基线：所有实体都吃到的 den.default
-    ├── entity/    谁：hosts/ 与 users/，只声明身份 + include 哪些 trait
+    ├── entity/    谁：hosts/、users/ 与 homes/（standalone），只声明身份 + include 哪些 trait
     └── trait/     配什么：唯一定义能力的地方
 ```
 

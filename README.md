@@ -21,7 +21,7 @@ modules/
 ├── meta/           # 框架层：schema（host / home 的选项）与 aspect-settings
 └── aspects/
     ├── default/    # 基线：所有实体都吃到的 den.default
-    ├── entity/     # 谁：hosts/ 与 users/，只声明身份 + include 哪些 trait
+    ├── entity/     # 谁：hosts/、users/ 与 homes/（standalone），只声明身份 + include 哪些 trait
     └── trait/      # 配什么：nix / system / network / security / desktop / dev / app / service
 ```
 
