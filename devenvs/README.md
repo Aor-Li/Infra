@@ -22,7 +22,11 @@ devenv-deploy flash-attention   # = devenv --from path:~/Infra/devenvs/projects/
 devenv 生成的 `.devenv/` 和 `devenv.lock` 已由 `devenv-deploy` 写进 `.git/info/exclude`。它们只是缓存，
 删掉后会重新生成，结果不变。
 
-编辑器要从激活后的 shell 里启动，才能拿到 `CLANGD_FLAGS`、venv 等环境。
+编辑器要从激活后的 shell 里启动，才能拿到 `CLANGD_FLAGS`、venv 等环境。VSCode（尤其 Remote-SSH）的扩展进程
+不经过 shell hook，所以环境启用了 cpp 模块时，`devenv-deploy` 会把 `clangd.path`（指向 `.devenv/profile/bin/clangd`）
+和 `clangd.arguments`（取自 `CLANGD_FLAGS`）合并进 `.vscode/settings.json`，并写进 `.git/info/exclude`。
+已绑定的仓库重新执行一次 `devenv-deploy <name>` 即可补上。这种绑定方式下项目里没有 `.envrc` / `devenv.nix`，
+direnv 和 devenv 的 VSCode 扩展都不会生效，不要装它们。
 
 常用命令：
 
