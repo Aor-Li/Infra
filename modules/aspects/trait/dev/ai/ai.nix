@@ -32,6 +32,7 @@
         lib.mkIf (osConfig == null) cache;
 
       includes = [
+        den.aspects.dev.ai.caam
         den.aspects.dev.ai.claude
         den.aspects.dev.ai.codex
         den.aspects.dev.ai.opencode
