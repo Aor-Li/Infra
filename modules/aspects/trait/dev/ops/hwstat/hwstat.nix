@@ -5,6 +5,11 @@
 # 每张卡一行，按 settings.groups 分组展示，没被任何分组认领的卡归入「借用」；
 # 自己的 GPU 任务在「任务」列显示简短名，`-T/--tasks` 列出完整命令 / 工作目录 / arena 登记；
 # `-f` 只看借用组里的空闲卡，`-v` 附带 CPU 用户，`-w 5` 每 5 秒原地刷新。
+#
+# `gpu-wait dgx0011:0-7`（= `hwstat --wait`）阻塞到这些卡空闲（无进程、显存低、arena 无未过期
+# 登记），等待期间用 OSC 7501 把所在终端标成 blocked，Rex 里一眼能看出哪个 agent 卡在等 GPU。
+# 同时给 Claude Code / Codex 各装一个 gpu-wait skill，让 agent 等卡时用它而不是自己写轮询。
+# skill 里写的是 gpu-wait 的 store 绝对路径：容器里的 Claude 没有 ~/.nix-profile，但挂了 /nix。
 { lib, ... }:
 {
   den.aspects.dev.ops.hwstat = {
@@ -44,10 +49,14 @@
     };
 
     homeManager =
-      { pkgs, settings, ... }:
       {
-        home.packages = [
-          (pkgs.writers.writePython3Bin "hwstat" {
+        lib,
+        pkgs,
+        settings,
+        ...
+      }:
+      let
+        hwstat = pkgs.writers.writePython3Bin "hwstat" {
             # 长行是表格格式化与远端探测脚本
             flakeIgnore = [ "E501" ];
           } (
@@ -64,8 +73,23 @@
               ] (
               builtins.readFile ./hwstat.py
             )
-          ))
+          );
+
+        gpuWait = pkgs.writeShellScriptBin "gpu-wait" ''
+          exec ${lib.getExe hwstat} --wait "$@"
+        '';
+
+        skill = builtins.replaceStrings [ "@GPU_WAIT@" ] [ (lib.getExe gpuWait) ] (
+          builtins.readFile ./gpu-wait/SKILL.md
+        );
+      in
+      {
+        home.packages = [
+          hwstat
+          gpuWait
         ];
+        programs.claude-code.skills.gpu-wait = skill;
+        programs.codex.skills.gpu-wait = skill;
       };
   };
 }

@@ -1,11 +1,13 @@
 """hwstat: 并发 ssh 到一组主机，汇总 CPU / 内存 / GPU 使用情况与占用用户。"""
 
 import argparse
+import base64
 import glob
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -15,7 +17,7 @@ from datetime import datetime, timezone
 
 DEFAULT_HOSTS = json.loads(r"""@HOSTS@""")
 GROUPS = json.loads(r"""@GROUPS@""")
-ARENA_REGISTRY = json.loads(r'''@ARENA@''')  # arena registry 目录（null = 不读），--tasks 用
+ARENA_REGISTRY = json.loads(r'''@ARENA@''')  # arena registry 目录（null = 不读），--tasks / --wait 用
 
 # 在远端执行（bash -s 从 stdin 读）。只输出带标签的行，由本地解析；
 # top 取第二帧才是真实的瞬时占用，并且只打印 %CPU > 0 的进程以减少传输量。
@@ -669,6 +671,136 @@ def collect(hosts, args):
         return list(ex.map(lambda h: probe(h, args.timeout), hosts))
 
 
+# ---- --wait：等指定的卡全部空出来 ----------------------------------------------------------
+#
+# 等待期间用 OSC 7501（Program Status Protocol）把所在终端标成 blocked，Rex 等终端因此能把
+# 「卡在等 GPU」和「正在干活」区分开。agent 从后台 / 管道里调用时自己没有终端，所以沿进程链
+# 往上找最外层那个有终端的祖先：Rex pane 里的 shell（或 docker exec / ssh 进去后的那一层）。
+# 不取最近的那个，是因为 Codex 会给命令单独开一个 pty，那个 pty 不通往 Rex。
+
+def outer_tty():
+    """沿父进程链往上，返回最外层祖先的终端设备路径；都没有终端则返回 None。"""
+    pid, found = os.getpid(), None
+    while pid > 1:
+        for fd in (0, 1, 2):
+            try:
+                path = os.readlink(f"/proc/{pid}/fd/{fd}")
+            except OSError:
+                continue
+            if path.startswith("/dev/pts/") or path.startswith("/dev/tty"):
+                found = path
+                break
+        try:
+            with open(f"/proc/{pid}/stat") as fh:
+                # comm 可能含空格和括号，ppid 在最后一个 ')' 之后的第二个字段
+                pid = int(fh.read().rpartition(")")[2].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return found
+
+
+class TermStatus:
+    """OSC 7501 子记录 gpu-wait/<pid>。不带 app，沿用根记录（claude-code / codex）的 app。"""
+
+    def __init__(self):
+        self.tty = outer_tty()
+        self.id = f"gpu-wait/{os.getpid()}"
+        self.last = None
+
+    def _send(self, body):
+        if not self.tty:
+            return
+        try:
+            with open(self.tty, "w") as fh:
+                fh.write(f"\033]7501;{body}\033\\")
+        except OSError:
+            pass
+
+    def blocked(self, msg):
+        # msg 必须是单行、不含控制字符
+        msg = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", msg)[:160]
+        if msg == self.last:
+            return
+        self.last = msg
+        b64 = lambda t: base64.b64encode(t.encode()).decode()  # noqa: E731
+        self._send(f"state=blocked:id={self.id}:title={b64('GPU')}:msg={b64(msg)}")
+
+    def clear(self):
+        if self.last is not None:
+            self._send(f"state=clear:id={self.id}")
+            self.last = None
+
+
+def busy_cards(specs, args, now):
+    """探测一次，返回 [(host, idx, 原因)]：仍被占用的卡；连不上的主机整体算作占用。"""
+    want = {}  # host -> None(整机) | set(idx)
+    for spec in specs:
+        host, idxs = parse_cards(spec)
+        prev = want.get(host, set())
+        want[host] = None if idxs is None or prev is None else prev | idxs
+    claims = {} if args.ignore_arena else load_claims()
+    busy = []
+    for host, r, err in collect(list(want), args):
+        if err:
+            busy.append((host, None, f"探测失败：{err}"))
+            continue
+        analyze(r)
+        idxs = want[host]
+        gpus = {g["idx"]: g for g in r["gpus"]}
+        for i in sorted(gpus if idxs is None else idxs):
+            g = gpus.get(i)
+            if g is None:
+                busy.append((host, i, "没有这张卡"))
+            elif not g["idle"]:
+                who = ",".join(g["owners"]) or f"显存 {g['used'] or 0:.0f} MiB"
+                busy.append((host, i, who))
+            else:
+                hit = [c for c in claims.get(host, []) if i in c["gpus"] and (not c["expires"] or c["expires"] >= now)]
+                if hit:
+                    busy.append((host, i, "arena：" + (hit[0]["agent"] or hit[0]["title"] or "已登记")))
+    return busy
+
+
+def describe(busy):
+    """[(host, idx, why)] -> 'dgx0011 gpu0-1 (alice), gpu3 (arena：codex)'，按主机、原因合并。"""
+    by = {}
+    for host, i, why in busy:
+        by.setdefault(host, {}).setdefault(why, []).append(i)
+    parts = []
+    for host, whys in by.items():
+        cards = [("整机" if None in idxs else "gpu" + ranges(idxs)) + f"（{why}）" for why, idxs in whys.items()]
+        parts.append(host + " " + "，".join(cards))
+    return "；".join(parts)
+
+
+def wait_free(specs, args):
+    status = TermStatus()
+
+    def stop(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, stop)
+    deadline = time.time() + args.max_wait if args.max_wait else None
+    try:
+        while True:
+            busy = busy_cards(specs, args, datetime.now(timezone.utc))
+            if not busy:
+                print(f"gpu-wait: {' '.join(specs)} 已空闲", file=sys.stderr)
+                return 0
+            what = describe(busy)
+            status.blocked("等待 GPU：" + what)
+            print(time.strftime("%H:%M:%S") + f" gpu-wait: 仍被占用 {what}", file=sys.stderr, flush=True)
+            if deadline and time.time() + args.interval > deadline:
+                print(f"gpu-wait: 等待超过 {args.max_wait:g}s，放弃", file=sys.stderr)
+                return 2
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        return 130
+    finally:
+        status.clear()
+
+
 def main():
     ap = argparse.ArgumentParser(description="并发查看一组主机的 GPU（每卡一行，按个人 / 借用分组）与 CPU 使用情况。")
     ap.add_argument("hosts", nargs="*", help=f"要查询的主机（默认：{len(DEFAULT_HOSTS)} 台预设主机 + 分组里的主机）")
@@ -679,7 +811,19 @@ def main():
     ap.add_argument("-j", "--jobs", type=int, default=32, help="并发 ssh 数（默认 32）")
     ap.add_argument("-t", "--timeout", type=int, default=30, help="单台主机超时秒数（默认 30）")
     ap.add_argument("--no-color", action="store_true", help="关闭颜色")
+    wait = ap.add_argument_group("等待模式（gpu-wait）")
+    wait.add_argument("--wait", action="store_true",
+                      help="把位置参数当作卡（dgx0011 / dgx0011:0-3,6），阻塞到它们全部空闲后返回 0；"
+                           "等待期间把终端标成 blocked（OSC 7501）")
+    wait.add_argument("-i", "--interval", type=float, default=30, metavar="SEC", help="--wait 的探测间隔（默认 30）")
+    wait.add_argument("--max-wait", type=float, metavar="SEC", help="--wait 最多等这么久，超时返回 2")
+    wait.add_argument("--ignore-arena", action="store_true", help="--wait 不把 arena 里未过期的登记算作占用")
     args = ap.parse_args()
+
+    if args.wait:
+        if not args.hosts:
+            ap.error("--wait 需要至少一个卡规格，如 dgx0011:0-7")
+        return wait_free(args.hosts, args)
 
     group_hosts = [parse_cards(c)[0] for g in GROUPS for c in g["cards"]]
     hosts = list(dict.fromkeys(group_hosts + (args.hosts or DEFAULT_HOSTS)))
