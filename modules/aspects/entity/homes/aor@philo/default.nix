@@ -22,6 +22,9 @@
     # 服务器用途，不要 Music / Videos / Public 这些 XDG 用户目录
     system.xdg.userDirs = false;
 
+    # 集群账号没有 chsh 权限，登录 shell 只能是 bash：交互式 bash 末尾 exec 进 fish
+    dev.shell.execFish = true;
+
     dev.ops.hwstat = {
       # 默认探测 dgx0001 … dgx0031
       hosts = map (i: "dgx" + lib.fixedWidthNumber 4 i) (lib.range 1 31);
