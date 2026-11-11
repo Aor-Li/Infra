@@ -11,7 +11,7 @@
       inherit (pkgs.stdenv.hostPlatform) system;
 
       # Claude Code 只把主对话报给终端（OSC 7501 根记录），这一轮一结束就显示完成；
-      # 这组 hook 把 subagent 与后台 Bash 补报成子记录，Rex 等终端据此继续显示运行中。
+      # 这组 hook 把 subagent、后台 Bash 与 Monitor 补报成子记录，Rex 等终端据此继续显示运行中。
       programStatus = pkgs.writeShellApplication {
         name = "claude-program-status";
         runtimeInputs = with pkgs; [
@@ -35,7 +35,7 @@
         install -Dm644 ${
           pkgs.writers.writeJSON "plugin.json" {
             name = "program-status";
-            description = "Report subagents and background Bash to the terminal via OSC 7501";
+            description = "Report subagents, background Bash and monitors to the terminal via OSC 7501";
           }
         } $out/.claude-plugin/plugin.json
         install -Dm644 ${
@@ -45,7 +45,7 @@
               SubagentStop = [ { hooks = [ hook ]; } ];
               PostToolUse = [
                 {
-                  matcher = "Bash|TaskStop|KillShell";
+                  matcher = "Bash|Monitor|TaskStop|KillShell";
                   hooks = [ hook ];
                 }
               ];
