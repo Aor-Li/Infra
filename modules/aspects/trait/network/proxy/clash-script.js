@@ -1,11 +1,12 @@
 // Clash Verge 全局扩展脚本模板（由 netsel setup 生成，勿手改）。`netsel setup` 把下面 SUBS 的占位符替换成从 Verge 订阅里读出的
-// [{ name, key, url }]，写到 Verge 的 profiles/Script.js（全局脚本，对任何激活的订阅都生效）。
+// [{ name, key, url }]，写到 Verge 的 profiles/Script.js。全局脚本仅在指定的汇总订阅上改写配置；
+// 选择其他订阅时保持它们的原生节点和分组。
 // 订阅链接含 token，只出现在生成后的文件里，不进仓库。
 // 占位符只能在代码里出现一次：替换是纯文本的，写进注释会把多行 JSON 漏到注释外面，脚本语法错误后
 // Verge 会静默退回原始订阅。脚本跑在 Verge 内嵌的 JS 引擎里，不要依赖 URL 等宿主 API。
 //
-// 不管激活的是哪份订阅，这里都丢掉它自带的节点 / 分组 / 规则，改用 proxy-providers 同时拉取
-// 所有订阅，再按下面三条线分流：
+// 选择汇总订阅时，丢掉它自带的节点 / 分组 / 规则，改用 proxy-providers 同时拉取
+// 所有订阅，再按下面几条线分流：
 //   DGX   philoai 集群（ssh 网关在阿里云加速器后面），默认直连
 //   国内   GEOSITE cn / GEOIP CN，默认直连
 //   国外   其余流量；默认「自动容灾」：按订阅顺序取第一个可用订阅里延迟最低的节点
@@ -13,6 +14,7 @@
 // 组名是 netsel 的 API，改名要同步改 netsel.py。
 
 const SUBS = __SUBS__;
+const NETSEL_PROFILE = __NETSEL_PROFILE__;
 
 const DGX_DOMAINS = ["philoai.xyz", "vegalb.com"];
 const TEST_URL = "https://www.gstatic.com/generate_204";
@@ -20,10 +22,12 @@ const TEST_URL = "https://www.gstatic.com/generate_204";
 const INFO_NODES = "剩余流量|距离下次重置|套餐到期|过期时间|官网";
 const AI_REGIONS = "(?i)\\b(JP|SG|US|TW)\\b|日本|新加坡|美国|台湾";
 
-function main(config) {
+function main(config, profileName) {
+  if (!NETSEL_PROFILE || profileName !== NETSEL_PROFILE) return config;
+
   const providers = {};
   for (const s of SUBS) {
-    // provider 与分组共用一个命名空间，所以 provider 用小写 key（vikings），分组用显示名（Vikings）
+    // provider 与分组共用一个命名空间，所以 provider 用小写 key（forest），分组用显示名（Forest）
     providers[s.key] = {
       type: "http",
       url: s.url,
@@ -45,7 +49,7 @@ function main(config) {
     { name: "国外", type: "select", proxies: ["自动容灾", ...names] },
     { name: "AI", type: "select", proxies: ["AI 自动", "国外", ...names] },
     { name: "自动容灾", type: "fallback", proxies: names.map(auto), ...urlTest },
-    // AI 优选只认名字里带地区的节点（JMS 的节点名不带地区，所以这里实际只有 Vikings）；
+    // AI 优选只认名字里带地区的节点；
     // 它全挂时 AI 自动退到自动容灾，不至于没有出口
     { name: "AI 自动", type: "fallback", proxies: ["AI 优选", "自动容灾"], ...urlTest },
     { name: "AI 优选", type: "url-test", use: SUBS.map((s) => s.key), filter: AI_REGIONS, ...urlTest },

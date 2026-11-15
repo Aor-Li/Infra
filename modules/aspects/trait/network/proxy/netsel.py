@@ -34,7 +34,7 @@ TEST_URL = "https://www.gstatic.com/generate_204"
 LINES = ["DGX", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
 # Verge 里订阅名 → (分组名, provider 文件名)；按此顺序决定「自动容灾」的优先级
 KNOWN_SUBS = [
-    (re.compile(r"viking", re.I), "Vikings", "vikings"),
+    (re.compile(r"forest", re.I), "Forest", "forest"),
     (re.compile(r"jms|jmssub", re.I), "JMS", "jms"),
 ]
 
@@ -153,7 +153,7 @@ def progress(on):
 
 
 def chain(proxies, name):
-    """沿 now 一路展开到具体节点：国外 → 自动容灾 → Vikings 自动 → 🇯🇵 JP-…"""
+    """沿 now 一路展开到具体节点：国外 → 自动容灾 → Forest 自动 → 🇯🇵 JP-…"""
     out = [name]
     while True:
         p = proxies.get(out[-1]) or {}
@@ -164,7 +164,7 @@ def chain(proxies, name):
 
 
 def subs(proxies):
-    """当前配置里的订阅分组（Vikings / JMS …），由 setup 生成的结构推出来。"""
+    """当前配置里的订阅分组（Forest / JMS …），由 setup 生成的结构推出来。"""
     fallback = proxies.get("自动容灾") or {}
     return [n.removesuffix(" 自动") for n in fallback.get("all", [])]
 
@@ -180,7 +180,7 @@ def provider_key(group):
 def cmd_status(api, retest=True):
     proxies = api.proxies()
     if "DGX" not in proxies:
-        die("当前配置里没有 DGX 分组：还没执行 `netsel setup`，或 Verge 还没应用全局脚本。")
+        die("当前配置没有 netsel 分流：可能选中了原生订阅；切回 JMS 汇总订阅，或执行 `netsel setup`。")
     names = subs(proxies)
 
     if retest:
@@ -360,10 +360,18 @@ def render_script():
             ):
                 found.append({"name": name, "key": key, "url": it["url"]})
                 break
-    if not found:
-        die("在 Clash Verge 里没找到 Vikings / JMS 订阅。")
+    # Verge 的全局脚本会在每份订阅上运行。只在 JMS 上启用 netsel 汇总分流；
+    # 没有 JMS 时脚本对所有订阅都不改写，保证新加的救急订阅始终能直接选节点。
+    jms_pattern = next(pat for pat, _, key in KNOWN_SUBS if key == "jms")
+    managed_name = None
+    for it in items:
+        if it.get("type") == "remote" and jms_pattern.search(str(it.get("name") or "")):
+            managed_name = it["name"]
+            break
     with open(TEMPLATE) as f:
-        js = f.read().replace("__SUBS__", json.dumps(found, ensure_ascii=False, indent=2))
+        js = (f.read()
+              .replace("__SUBS__", json.dumps(found, ensure_ascii=False, indent=2))
+              .replace("__NETSEL_PROFILE__", json.dumps(managed_name, ensure_ascii=False)))
     return js, [s["name"] for s in found]
 
 

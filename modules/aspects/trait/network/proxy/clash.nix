@@ -1,7 +1,8 @@
 # 关掉它你会失去：Clash Verge 代理客户端，以及按 DGX / 国内 / 国外分流、在终端里看状态和切节点的 `netsel`。
 #
-# Clash Verge 一次只激活一份订阅，所以分流不写在订阅上，而是写在 Verge 的全局扩展脚本里：
-# clash-script.js 用 proxy-providers 同时拉取 Vikings 与 JMS，再按 DGX / 国内 / 国外 / AI 分组。
+# Clash Verge 一次只激活一份订阅。全局扩展脚本只在 JMS 激活时启用 netsel 汇总分流；
+# 选 Forest 或后来加入的其他订阅时保留其原生节点和分组，供现有节点故障时救急。
+# clash-script.js 用 proxy-providers 同时拉取 Forest 与 JMS，再按 DGX / 国内 / 国外 / AI 分组。
 # 订阅链接带 token，不进仓库——`netsel setup` 从 Verge 的 profiles.yaml 读出链接，套进模板，
 # 写到 Verge 的 profiles/Script.js。Verge 和这个文件都由 GUI 管，仓库只提供模板与工具。
 #
