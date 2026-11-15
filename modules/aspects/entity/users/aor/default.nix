@@ -1,5 +1,11 @@
 { den, ... }:
 {
+  # 开了 sshd 的 host（server 角色）上允许这些公钥以 aor 登录；sshd 禁用了密码登录，
+  # 这里没有 key 就只能去 tty 了。
+  den.aspects.aor.nixos.users.users.aor.openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMU2Aa8TVEcmC0uDdqve6MLKh1orjoGpUtIkpphjZoVj aor@Shokuin"
+  ];
+
   den.aspects.aor.includes = [
     den.provides.primary-user
 
