@@ -5,9 +5,11 @@
     netsel pick [组]       用 fzf 选择某个分组的出口；不带组名先选组
     netsel update          重新拉取所有订阅
     netsel setup           把 Clash Verge 收敛到仓库的配置：导入清单里缺的订阅、分流脚本、
-                           外部控制器、随机 secret；有差异且 Verge 在运行时会重启它
-                           （switch 时由 activation 自动执行）
-    netsel setup --no-restart   只检查；不导入订阅，Verge 在运行时不动它，只列出待应用的差异
+                           外部控制器、随机 secret；有差异且 Verge 在运行时会重启它（断网几秒）
+    netsel setup --check   只列出待应用的变更，不做任何改动（switch 时由 activation 执行）
+
+switch 不会改动代理：网络只在你执行 `netsel setup` 时才会变。不一致时 switch 与 `netsel`
+总览都会提示。
 
 分组结构由 clash-script.js 决定；这里只认组名，不重复定义策略。
 订阅有哪些、什么顺序由 sops 下发的订阅清单决定（见 load_subs），不看 Verge 里导入了什么。
@@ -202,6 +204,10 @@ def load_subs(wait_s=0):
 
 
 def cmd_status(api, retest=True):
+    hint = drift_hint()
+    if hint:
+        print(c("33", hint))
+        print()
     proxies = api.proxies()
     if "DGX" not in proxies:
         die("当前配置没有 netsel 分流：可能选中了原生订阅；切回 JMS 汇总订阅，或执行 `netsel setup`。")
@@ -363,8 +369,8 @@ def cmd_update(api):
 # ---------------------------------------------------------------- setup
 #
 # Verge 的配置文件归 Verge 所有：GUI 每改一次设置就整份重写，所以不能做成只读 symlink。
-# 这里只把少数几项「收敛」到期望值，其余设置照旧归 GUI。home-manager activation 每次 switch
-# 都跑一遍，幂等：没有差异就什么都不做。
+# 这里只把少数几项「收敛」到期望值，其余设置照旧归 GUI。只在手动执行 `netsel setup` 时改动，
+# 幂等：没有差异就什么都不做。switch 只跑 `--check`（plan_setup 不带副作用）。
 #
 # Verge 运行时把配置握在内存里，退出时还会写回磁盘，所以有差异时顺序必须是
 # 先退出 Verge → 再写文件 → 再启动，否则改动会被它覆盖掉。
@@ -397,7 +403,7 @@ def render_script(subs):
                 .replace("__NETSEL_PROFILE__", json.dumps(managed_name, ensure_ascii=False)))
 
 
-def sync_profiles(subs, do_import):
+def sync_profiles(subs):
     """清单里有、Verge 里没有的订阅，经 clash://install-config 让 Verge 自己导入——profiles.yaml
     归 Verge 所有（它会整份重写），这里不直接写。Verge 里多出来的订阅只提示、不删：可能是
     临时加的救急订阅。"""
@@ -407,11 +413,6 @@ def sync_profiles(subs, do_import):
             print(c("33", f"Verge 里有清单之外的订阅「{it.get('name')}」，未改动；不需要的话在 GUI 里删掉。"))
     have = {it.get("url") for it in verge_remotes()}
     missing = [s for s in subs if s["url"] not in have]
-    if not missing:
-        return
-    if not do_import:
-        print("Verge 里缺少订阅：" + "、".join(s["name"] for s in missing) + "；执行 `netsel setup` 导入。")
-        return
     for s in missing:
         # 只能带 url 一个参数：Verge（2.5.10）把 url= 之后的全部内容当链接，再带 &name=… 会
         # 被拼进订阅链接里。订阅名由 Verge 自己取（机场下发的名字），反正这里按 URL 认订阅。
@@ -476,18 +477,14 @@ def wait(cond, timeout):
     return False
 
 
-def cmd_setup(restart=True):
-    if not os.path.isdir(VERGE):
-        print("netsel setup: 还没有 Clash Verge 配置目录（尚未首次启动），跳过。")
-        return
+def plan_setup(subs):
+    """算出要让 Verge 收敛到清单还差什么，不做任何改动：(缺的订阅, {path: (新内容, 说明)})。"""
+    have = {it.get("url") for it in verge_remotes()}
+    missing = [s for s in subs if s["url"] not in have]
 
-    subs = load_subs(wait_s=15)
-    # 先导入：生成脚本要用汇总订阅在 Verge 里的名字
-    sync_profiles(subs, do_import=restart)
-
+    writes = {}
     script_path = os.path.join(VERGE, "profiles", "Script.js")
     js = render_script(subs)
-    writes = {}  # path → (新内容, 说明)
     if read(script_path) != js:
         writes[script_path] = (js, "全局扩展脚本（分流：" + "、".join(s["name"] for s in subs) + "）")
 
@@ -507,18 +504,56 @@ def cmd_setup(restart=True):
         new = converge_yaml(os.path.join(VERGE, name), fn)
         if new is not None:
             writes[os.path.join(VERGE, name)] = (new, what)
+    return missing, writes
+
+
+def pending(subs):
+    """待应用的变更，一项一句；为空表示 Verge 已与清单一致。"""
+    missing, writes = plan_setup(subs)
+    out = ["缺订阅 " + "、".join(s["name"] for s in missing)] if missing else []
+    return out + [what for _, what in writes.values()]
+
+
+def drift_hint():
+    """netsel 总览顶部的一行提示：清单与 Verge 不一致时提醒执行 setup，一致时为 None。"""
+    if not os.path.isdir(VERGE):
+        return None
+    if not os.path.exists(SUBSCRIPTIONS):
+        return f"订阅清单 {SUBSCRIPTIONS} 还没解密（本机有 ~/.config/sops/age/keys.txt 吗？）"
+    todo = pending(load_subs())
+    return "待应用：" + "；".join(todo) + "。执行 `netsel setup`" if todo else None
+
+
+def cmd_check():
+    """switch 时由 activation 调用：只报告，不导入、不写文件、不重启 Verge。"""
+    if not os.path.isdir(VERGE):
+        print("netsel：还没有 Clash Verge 配置目录（尚未首次启动），跳过检查。")
+        return
+    todo = pending(load_subs(wait_s=15))
+    if not todo:
+        print("Clash Verge：已与订阅清单一致。")
+        return
+    print(c("33", "Clash Verge 有待应用的变更，执行 `netsel setup` 应用（会重启 Verge，网络断几秒）："))
+    for t in todo:
+        print(c("33", f"  - {t}"))
+
+
+def cmd_setup():
+    if not os.path.isdir(VERGE):
+        print("netsel setup: 还没有 Clash Verge 配置目录（尚未首次启动），先打开一次 Clash Verge。")
+        return
+
+    subs = load_subs()
+    # 先导入：生成脚本要用汇总订阅在 Verge 里的名字
+    sync_profiles(subs)
+    missing, writes = plan_setup(subs)
+    script_path = os.path.join(VERGE, "profiles", "Script.js")
 
     if not writes:
         print("Clash Verge：分流脚本与控制器配置已是最新。")
         return
 
     was_running = verge_running()
-    if was_running and not restart:
-        print("Clash Verge 正在运行，需要重启才能写入（它退出时会把内存里的旧配置写回）：")
-        for _, what in writes.values():
-            print(f"  - {what}")
-        print("执行 `netsel setup` 完成。")
-        return
     if was_running:
         print("退出 Clash Verge …（网络会中断几秒）")
         quit_verge()
@@ -537,8 +572,8 @@ def cmd_setup(restart=True):
         print(f"已更新：{what}")
 
     if was_running:
-        # open 拉起的 App 继承调用方环境；activation 的 PATH 里没有 /usr/sbin，Verge 的 set_dns.sh
-        # 会因找不到 scutil 而没接管系统 DNS——TUN 下只剩裸 IP 连接，按域名的分流全部落空。
+        # open 拉起的 App 继承调用方环境；PATH 里没有 /usr/sbin 时 Verge 的 set_dns.sh 会因找不到
+        # scutil 而没接管系统 DNS——TUN 下只剩裸 IP 连接，按域名的分流全部落空。
         env = dict(os.environ, PATH="/usr/bin:/bin:/usr/sbin:/sbin")
         subprocess.run(["/usr/bin/open", "-g", "-a", "Clash Verge"], env=env)
         api = Api()
@@ -567,7 +602,7 @@ def main():
         print(__doc__)
         return
     if args[:1] == ["setup"]:
-        return cmd_setup(restart="--no-restart" not in args)
+        return cmd_check() if "--check" in args else cmd_setup()
     api = Api()
     if not args or args == ["-n"] or args[:1] == ["status"]:
         return cmd_status(api, retest="-n" not in args)

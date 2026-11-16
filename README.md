@@ -45,6 +45,8 @@ modules/
 # 首次激活一台机器 / 一个 home
 ./scripts/bootstrap.sh Enten          # nixos-rebuild（home-manager 随系统一起激活）
 ./scripts/bootstrap.sh aor@philo      # 只有 home-manager
+# macOS：switch 不改动代理。打开一次 Clash Verge 后执行，让它收敛到 sops 里的订阅清单
+netsel setup
 
 # 修改 flake 依赖后，重新生成根 flake.nix
 nix run .#write-flake
