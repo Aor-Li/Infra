@@ -42,7 +42,7 @@ in
       default = true;
       description = ''
         substituters 里把国内镜像（sjtu / ustc / tuna）排在最前。默认开；
-        在境外的机器（如 aor@ali-cloud）上关掉——镜像每次请求要 1s 以上，只留官方缓存。
+        在境外的机器（如 aor@AliCloud）上关掉——镜像每次请求要 1s 以上，只留官方缓存。
       '';
     };
 

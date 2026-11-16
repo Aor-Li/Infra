@@ -3,6 +3,7 @@
     netsel                 总览：各分流线的当前出口、订阅状态、连通性（会先测一轮延迟）
     netsel -n              总览，但不重新测速（用 mihomo 上次的结果）
     netsel pick [组]       用 fzf 选择某个分组的出口；不带组名先选组
+    netsel tune            给 AliCloud 线挑出口：逐个候选实测 `ssh AliCloud` 登录耗时，选最快的
     netsel update          重新拉取所有订阅
     netsel setup           把 Clash Verge 收敛到仓库的配置：导入清单里缺的订阅、分流脚本、
                            外部控制器；有差异且 Verge 在运行时会重启它（断网几秒）
@@ -35,7 +36,10 @@ VERGE = os.path.expanduser(
 TEMPLATE = "@template@"
 SUBSCRIPTIONS = "@subscriptions@"  # sops 解密后的订阅清单
 TEST_URL = "https://www.gstatic.com/generate_204"
-LINES = ["DGX", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
+LINES = ["TurboAI", "AliCloud", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
+# 按 ssh 登录实测连通性的分流线 → 测哪个 ssh 别名（来自 network/ssh/remote/，经 sops 落到 ~/.ssh/config.d/）
+SSH_LINES = {"TurboAI": "TurboAI-gw", "AliCloud": "AliCloud"}
+SSH = "/usr/bin/ssh"  # activation 的 PATH 里没有 ssh
 
 TTY = sys.stdout.isatty()
 
@@ -208,7 +212,9 @@ def cmd_status(api, retest=True):
         print(c("33", hint))
         print()
     proxies = api.proxies()
-    if "DGX" not in proxies:
+    if not all(line in proxies for line in LINES):
+        if hint:  # 脚本还是旧的（分流线改过名），提示里已经让执行 setup
+            die("当前分流结构与仓库不一致，执行 `netsel setup`。")
         summary = next((s["name"] for s in load_subs() if s["summary"]), "汇总订阅") if os.path.exists(SUBSCRIPTIONS) else "汇总订阅"
         die(f"当前激活的不是汇总订阅，没有 netsel 分流：在 Clash Verge 里选中 {summary}"
             "（deep link 导入新订阅后 Verge 可能自动切到了它），或执行 `netsel setup`。")
@@ -218,7 +224,7 @@ def cmd_status(api, retest=True):
         retest_groups(api, names)
         proxies = api.proxies()
 
-    # 连通性：分流线逐条实测（经 mihomo 的出口），DGX 另测真实 ssh 登录
+    # 连通性：分流线逐条实测（经 mihomo 的出口），SSH_LINES 另测真实 ssh 登录
     targets = {
         "国内": "https://www.baidu.com",
         "国外": TEST_URL,
@@ -226,22 +232,22 @@ def cmd_status(api, retest=True):
     }
     with cf.ThreadPoolExecutor() as ex:
         futs = {k: ex.submit(api.delay, k, u) for k, u in targets.items()}
-        ssh_fut = ex.submit(probe_ssh)
+        ssh_futs = {k: ex.submit(probe_ssh, h) for k, h in SSH_LINES.items()}
         reach = {k: f.result() for k, f in futs.items()}
-        ssh_res = ssh_fut.result()
+        ssh_res = {k: f.result() for k, f in ssh_futs.items()}
 
-    print(c("1", f"  {pad('分流', 6)} {pad('出口', 50)}  连通性"))
+    print(c("1", f"  {pad('分流', 9)} {pad('出口', 50)}  连通性"))
     for line in LINES:
         ch = chain(proxies, line)
         leaf = proxies.get(ch[-1]) or {}
         path = " → ".join(short(x) for x in ch[1:])
         if leaf.get("type") not in ("Direct", "Reject") and ch[-1] not in ("DIRECT",):
             path += f" ({fmt_delay(last_delay(leaf))})"
-        if line == "DGX":
-            r = ssh_res
+        if line in SSH_LINES:
+            r = ssh_res[line]
         else:
             r = f"{targets[line].split('//')[1]:<18} {fmt_delay(reach[line])}"
-        print(f"  {pad(line, 6)} {pad(path, 50)}  {r}")
+        print(f"  {pad(line, 9)} {pad(path, 50)}  {r}")
 
     print()
     print(c("1", "订阅"))
@@ -289,27 +295,47 @@ def pad(s, width):
     return s + " " * max(0, width - w)
 
 
-def probe_ssh():
-    """按 ~/.ssh/config 实际会走的路径登录一次 DGX 网关，计时。"""
-    host = "dgx-gw-0021"
+def ssh_config(host):
+    """`ssh -G` 的结果 {键: 值}；~/.ssh/config 里没有这个别名时返回 None（ssh -G 会原样回显主机名）。"""
     try:
-        cfg = subprocess.run(
-            ["ssh", "-G", host], capture_output=True, text=True, timeout=5
+        out = subprocess.run(
+            [SSH, "-G", host], capture_output=True, text=True, timeout=5
         ).stdout
     except (OSError, subprocess.TimeoutExpired):
-        return "ssh 不可用"
-    via = "ssh-direct" if "ssh-direct" in cfg else "经 Clash"
+        return None
+    cfg = dict(ln.split(" ", 1) for ln in out.splitlines() if " " in ln)
+    if cfg.get("hostname", host).lower() == host.lower():
+        return None
+    return cfg
+
+
+def ssh_login(host):
+    """按 ~/.ssh/config 实际会走的路径登录一次，返回毫秒；失败返回 None。"""
     t = time.time()
     try:
         ok = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host, "true"],
+            [SSH, "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host, "true"],
             capture_output=True,
             timeout=15,
         ).returncode == 0
     except subprocess.TimeoutExpired:
         ok = False
-    ms = int((time.time() - t) * 1000)
-    return f"ssh {host} [{via}] " + (c("32" if ms < 3000 else "33", f"{ms}ms 登录") if ok else c("31", "失败"))
+    return int((time.time() - t) * 1000) if ok else None
+
+
+def probe_ssh(host):
+    cfg = ssh_config(host)
+    if cfg is None:
+        return c("2", f"ssh {host} 未配置")
+    via = "ssh-direct" if "ssh-direct" in cfg.get("proxycommand", "") else "经 Clash"
+    ms = ssh_login(host)
+    return f"ssh {host} [{via}] " + (c("32" if ms < 3000 else "33", f"{ms}ms 登录") if ms else c("31", "失败"))
+
+
+def alicloud_hosts():
+    """AliCloud 线按地址匹配；地址在 sops 解密出的 ssh 条目里，不进仓库。没配置时为空（不加规则）。"""
+    cfg = ssh_config(SSH_LINES["AliCloud"])
+    return [cfg["hostname"]] if cfg else []
 
 
 def fzf(lines, prompt):
@@ -354,6 +380,47 @@ def cmd_pick(api, group=None):
     choice = fzf(lines, f"{group}> ")
     api.select(group, choice)
     print(f"{group} → {choice}")
+
+
+def cmd_tune(api, group="AliCloud", rounds=3):
+    """mihomo 的测速只发 HTTP，测不了 ssh，所以这里自己测：把分组依次切到每个候选，各登录
+    rounds 次，按（失败次数，中位数）排序选最好的。新出口只对新连接生效。"""
+    host = SSH_LINES.get(group)
+    if not host:
+        die(f"只有 {', '.join(SSH_LINES)} 能按 ssh 实测调出口")
+    cfg = ssh_config(host)
+    if cfg is None:
+        die(f"~/.ssh/config 里没有 {host}：本机没 include network.ssh.remote.{group}？")
+    if "ssh-direct" in cfg.get("proxycommand", ""):
+        die(f"{host} 经 ssh-direct 直连，不经过 Clash，调 {group} 线没有意义")
+    proxies = api.proxies()
+    g = proxies.get(group) or die(f"没有分组 {group}，先执行 `netsel setup`")
+    orig = g["now"]
+    print(c("1", f"实测 ssh {host} 登录（每个出口 {rounds} 次）"))
+    scores = {}
+    try:
+        for cand in g["all"]:
+            api.select(group, cand)
+            times = [ssh_login(host) for _ in range(rounds)]
+            ok = sorted(t for t in times if t)
+            fails = rounds - len(ok)
+            med = ok[len(ok) // 2] if ok else None
+            scores[cand] = (fails, med if med is not None else float("inf"))
+            leaf = " → ".join(short(x) for x in chain(api.proxies(), cand)[1:])
+            res = c("31", "全部失败") if not ok else (
+                c("32" if med < 3000 else "33", f"{med}ms") + (c("31", f"  失败 {fails}") if fails else ""))
+            print(f"  {pad(cand, 12)} {pad(res, 16)} {c('2', leaf)}")
+    except BaseException:
+        api.select(group, orig)  # 中途 Ctrl-C / 出错时别把分组留在某个试探中的候选上
+        raise
+    best = min(scores, key=scores.get)
+    if scores[best][0] == rounds:
+        api.select(group, orig)
+        die(f"所有出口都登录失败，{group} 保持 {orig}")
+    api.select(group, best)
+    print(f"{group} → {best}" + ("（与原来相同）" if best == orig else f"（原来是 {orig}）"))
+    if best != orig:
+        print(c("2", "已建立的连接（如 Rex 隧道）仍走旧出口，断开重连后才换。"))
 
 
 def cmd_update(api):
@@ -405,6 +472,7 @@ def render_script(subs):
     with open(TEMPLATE) as f:
         return (f.read()
                 .replace("__SUBS__", json.dumps(found, ensure_ascii=False, indent=2))
+                .replace("__ALICLOUD__", json.dumps(alicloud_hosts()))
                 .replace("__NETSEL_PROFILE__", json.dumps(managed_name, ensure_ascii=False)))
 
 
@@ -611,6 +679,8 @@ def main():
         return cmd_status(api, retest="-n" not in args)
     if args[0] == "pick":
         return cmd_pick(api, args[1] if len(args) > 1 else None)
+    if args[0] == "tune":
+        return cmd_tune(api, *args[1:2])
     if args[0] == "update":
         return cmd_update(api)
     die(f"未知命令 {args[0]}，见 netsel -h")

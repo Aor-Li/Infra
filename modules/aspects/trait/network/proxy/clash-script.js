@@ -1,5 +1,6 @@
 // Clash Verge 全局扩展脚本模板（由 netsel setup 生成，勿手改）。`netsel setup` 把下面 SUBS 的占位符替换成
-// sops 订阅清单里的 [{ name, key, url }]（见 clash.nix），写到 Verge 的 profiles/Script.js。全局脚本仅在
+// sops 订阅清单里的 [{ name, key, url }]（见 clash.nix），ALICLOUD 的占位符替换成 `ssh -G AliCloud` 解析出的
+// 地址（同样来自 sops，仓库里没有明文），写到 Verge 的 profiles/Script.js。全局脚本仅在
 // 汇总订阅上改写配置；选择其他订阅时保持它们的原生节点和分组。
 // 订阅链接含 token，仓库里只有密文，明文只出现在生成后的文件里。
 // 占位符只能在代码里出现一次：替换是纯文本的，写进注释会把多行 JSON 漏到注释外面，脚本语法错误后
@@ -7,7 +8,9 @@
 //
 // 选择汇总订阅时，丢掉它自带的节点 / 分组 / 规则，改用 proxy-providers 同时拉取
 // 所有订阅，再按下面几条线分流：
-//   DGX   philoai 集群（ssh 网关在阿里云加速器后面），默认直连
+//   TurboAI   TurboAI 集群（ssh 网关在阿里云加速器后面），默认直连
+//   AliCloud  同事开的阿里云美国机器（按 IP 匹配）。国内直连美国质量不稳，单独一条线，
+//             由 `netsel tune` 按 ssh 登录实测挑出口；mihomo 的测速只会发 HTTP，测不了 ssh
 //   国内   GEOSITE cn / GEOIP CN，默认直连
 //   国外   其余流量；默认「自动容灾」：按订阅顺序取第一个可用订阅里延迟最低的节点
 //   AI    Claude / OpenAI 等不对香港开放的服务，按地区分三档逐级回落：美国 → 非亚洲 → 其余允许地区；
@@ -17,7 +20,9 @@
 const SUBS = __SUBS__;
 const NETSEL_PROFILE = __NETSEL_PROFILE__;
 
-const DGX_DOMAINS = ["philoai.xyz", "vegalb.com"];
+const ALICLOUD = __ALICLOUD__;
+
+const TURBOAI_DOMAINS = ["philoai.xyz", "vegalb.com"];
 const TEST_URL = "https://www.gstatic.com/generate_204";
 // 订阅里用来展示流量 / 到期的假节点
 const INFO_NODES = "剩余流量|距离下次重置|套餐到期|过期时间|官网";
@@ -50,7 +55,9 @@ function main(config, profileName) {
   const urlTest = { url: TEST_URL, interval: 300, tolerance: 50, lazy: true };
 
   const groups = [
-    { name: "DGX", type: "select", proxies: ["DIRECT", "国外"] },
+    { name: "TurboAI", type: "select", proxies: ["DIRECT", "国外"] },
+    // 国外在前：没调过时与以前一样（以前它落在 MATCH,国外）。AI 美国是离机器最近的一档节点
+    { name: "AliCloud", type: "select", proxies: ["国外", "DIRECT", "AI 美国", ...names] },
     { name: "国内", type: "select", proxies: ["DIRECT", "国外"] },
     { name: "国外", type: "select", proxies: ["自动容灾", ...names] },
     { name: "AI", type: "select", proxies: ["AI 自动", "国外", ...names] },
@@ -84,7 +91,10 @@ function main(config, profileName) {
 
   const subHosts = SUBS.map((s) => s.url.replace(/^[a-z]+:\/\//i, "").split(/[/?#:]/)[0]);
   const rules = [
-    ...DGX_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},DGX`),
+    ...TURBOAI_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},TurboAI`),
+    ...ALICLOUD.map((h) =>
+      /^[0-9.]+$/.test(h) ? `IP-CIDR,${h}/32,AliCloud,no-resolve` : `DOMAIN,${h},AliCloud`,
+    ),
     ...subHosts.map((h) => `DOMAIN,${h},DIRECT`),
     "GEOSITE,private,DIRECT",
     "GEOIP,private,DIRECT,no-resolve",
@@ -98,7 +108,7 @@ function main(config, profileName) {
 
   // DNS 写死，不依赖激活的订阅带不带（JMS 就不带）。国外域名按规则走代理、由远端解析，
   // 这里的上游只决定国内与直连域名的解析结果。
-  // DGX 与订阅域名拿真实 IP：国内 DNS 才会解析到国内加速节点，ssh-direct 也不会碰上 fake-ip。
+  // TurboAI 与订阅域名拿真实 IP：国内 DNS 才会解析到国内加速节点，ssh-direct 也不会碰上 fake-ip。
   const domestic = ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"];
   const dns = {
     ...(config.dns || {}),
@@ -111,7 +121,7 @@ function main(config, profileName) {
     "fake-ip-filter": [
       ...new Set([
         ...((config.dns || {})["fake-ip-filter"] || ["+.lan", "+.local"]),
-        ...DGX_DOMAINS.map((d) => `+.${d}`),
+        ...TURBOAI_DOMAINS.map((d) => `+.${d}`),
         ...subHosts,
       ]),
     ],
