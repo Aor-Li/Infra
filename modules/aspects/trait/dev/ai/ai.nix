@@ -6,6 +6,10 @@
 { den, ... }:
 {
   flake-file.inputs.llm-agents.url = "github:numtide/llm-agents.nix";
+  flake-file.inputs.matt-pocock-skills = {
+    url = "github:mattpocock/skills";
+    flake = false;
+  };
 
   den.aspects.dev.ai =
     let

@@ -1,4 +1,4 @@
-# 关掉它你会失去：Claude Code CLI 本体、Claude 桌面客户端，以及终端里后台任务的运行指示。
+# 关掉它你会失去：Claude Code CLI 本体、Claude 桌面客户端、Matt Pocock skills，以及终端里后台任务的运行指示。
 { inputs, ... }:
 {
   den.aspects.dev.ai.claude.darwin = {
@@ -58,6 +58,25 @@
       programs.claude-code = {
         enable = true;
         package = inputs.llm-agents.packages.${system}.claude-code;
+        # 与 Codex 锁定同一份来源，安装到 Claude 自己的 skills 目录。
+        skills = lib.mergeAttrsList (
+          map
+            (
+              group:
+              let
+                directory = inputs.matt-pocock-skills.outPath + "/skills/${group}";
+              in
+              lib.mapAttrs (name: _: directory + "/${name}") (
+                lib.filterAttrs (
+                  name: type: type == "directory" && builtins.pathExists (directory + "/${name}/SKILL.md")
+                ) (builtins.readDir directory)
+              )
+            )
+            [
+              "engineering"
+              "productivity"
+            ]
+        );
         plugins.program-status = programStatusPlugin;
       };
     };

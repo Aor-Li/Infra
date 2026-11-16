@@ -1,4 +1,4 @@
-# 关掉它你会失去：Codex CLI 本体、ACP 接入、桌面客户端，以及终端里子 agent 与长命令的运行指示。
+# 关掉它你会失去：Codex CLI 本体、ACP 接入、桌面客户端、Matt Pocock skills，以及终端里子 agent 与长命令的运行指示。
 { inputs, ... }:
 {
   # 桌面客户端用的是 chatgpt cask（ChatGPT.app，bundle id 已是 com.openai.codex）；
@@ -16,9 +16,7 @@
       # 与跑得久的命令（含后台 terminal）补报成子记录，Rex 等终端据此继续显示运行中。
       programStatus = pkgs.writers.writePython3Bin "codex-program-status" {
         flakeIgnore = [ "E501" ];
-      } (
-        builtins.readFile ./program-status/codex-program-status.py
-      );
+      } (builtins.readFile ./program-status/codex-program-status.py);
 
       hook = {
         type = "command";
@@ -92,6 +90,25 @@
       programs.codex = {
         enable = true;
         package = inputs.llm-agents.packages.${system}.codex;
+        # 只安装正式的两组 skills；各项保留整个目录，连同脚本和参考资料一起链接。
+        skills = lib.mergeAttrsList (
+          map
+            (
+              group:
+              let
+                directory = inputs.matt-pocock-skills.outPath + "/skills/${group}";
+              in
+              lib.mapAttrs (name: _: directory + "/${name}") (
+                lib.filterAttrs (
+                  name: type: type == "directory" && builtins.pathExists (directory + "/${name}/SKILL.md")
+                ) (builtins.readDir directory)
+              )
+            )
+            [
+              "engineering"
+              "productivity"
+            ]
+        );
         marketplaces.${marketplaceName} = marketplace;
         settings = {
           features.plugin_hooks = true;
