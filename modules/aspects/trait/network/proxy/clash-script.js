@@ -1,7 +1,7 @@
-// Clash Verge 全局扩展脚本模板（由 netsel setup 生成，勿手改）。`netsel setup` 把下面 SUBS 的占位符替换成从 Verge 订阅里读出的
-// [{ name, key, url }]，写到 Verge 的 profiles/Script.js。全局脚本仅在指定的汇总订阅上改写配置；
-// 选择其他订阅时保持它们的原生节点和分组。
-// 订阅链接含 token，只出现在生成后的文件里，不进仓库。
+// Clash Verge 全局扩展脚本模板（由 netsel setup 生成，勿手改）。`netsel setup` 把下面 SUBS 的占位符替换成
+// sops 订阅清单里的 [{ name, key, url }]（见 clash.nix），写到 Verge 的 profiles/Script.js。全局脚本仅在
+// 汇总订阅上改写配置；选择其他订阅时保持它们的原生节点和分组。
+// 订阅链接含 token，仓库里只有密文，明文只出现在生成后的文件里。
 // 占位符只能在代码里出现一次：替换是纯文本的，写进注释会把多行 JSON 漏到注释外面，脚本语法错误后
 // Verge 会静默退回原始订阅。脚本跑在 Verge 内嵌的 JS 引擎里，不要依赖 URL 等宿主 API。
 //

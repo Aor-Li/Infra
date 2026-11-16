@@ -4,11 +4,13 @@
     netsel -n              总览，但不重新测速（用 mihomo 上次的结果）
     netsel pick [组]       用 fzf 选择某个分组的出口；不带组名先选组
     netsel update          重新拉取所有订阅
-    netsel setup           把 Clash Verge 收敛到仓库的配置：分流脚本、外部控制器、随机 secret；
-                           有差异且 Verge 在运行时会重启它（switch 时由 activation 自动执行）
-    netsel setup --no-restart   只检查；Verge 在运行时不动它，只列出待应用的差异
+    netsel setup           把 Clash Verge 收敛到仓库的配置：导入清单里缺的订阅、分流脚本、
+                           外部控制器、随机 secret；有差异且 Verge 在运行时会重启它
+                           （switch 时由 activation 自动执行）
+    netsel setup --no-restart   只检查；不导入订阅，Verge 在运行时不动它，只列出待应用的差异
 
 分组结构由 clash-script.js 决定；这里只认组名，不重复定义策略。
+订阅有哪些、什么顺序由 sops 下发的订阅清单决定（见 load_subs），不看 Verge 里导入了什么。
 """
 
 import concurrent.futures as cf
@@ -30,13 +32,9 @@ VERGE = os.path.expanduser(
     "~/Library/Application Support/io.github.clash-verge-rev.clash-verge-rev"
 )
 TEMPLATE = "@template@"
+SUBSCRIPTIONS = "@subscriptions@"  # sops 解密后的订阅清单
 TEST_URL = "https://www.gstatic.com/generate_204"
 LINES = ["DGX", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
-# Verge 里订阅名 → (分组名, provider 文件名)；按此顺序决定「自动容灾」的优先级
-KNOWN_SUBS = [
-    (re.compile(r"forest", re.I), "Forest", "forest"),
-    (re.compile(r"jms|jmssub", re.I), "JMS", "jms"),
-]
 
 TTY = sys.stdout.isatty()
 
@@ -171,7 +169,33 @@ def subs(proxies):
 
 def provider_key(group):
     """订阅分组名 → provider 名（mihomo 里两者不能重名，见 clash-script.js）。"""
-    return next((k for _, n, k in KNOWN_SUBS if n == group), group.lower())
+    return group.lower()
+
+
+def load_subs(wait_s=0):
+    """订阅清单：entity/users/aor/secrets.yaml 的 clash.subscriptions，经 sops 解密到本机。
+
+    内容是 YAML 列表 [{name, url, summary?}]，顺序即「自动容灾」的优先级；恰好一项
+    summary: true，它是全局脚本改写的汇总订阅，其余订阅激活时保留原生节点供救急。
+    清单在所有机器上一致，所以分流结构不再取决于本机 Verge 里恰好导入了哪些订阅。"""
+    if wait_s:  # 第一次 switch 时 sops-nix 的 launchd agent 与 activation 并行，等它解密
+        wait(lambda: os.path.exists(SUBSCRIPTIONS), wait_s)
+    text = read(SUBSCRIPTIONS)
+    if text is None:
+        die(f"读不到订阅清单 {SUBSCRIPTIONS}：sops 没解密？本机需要 ~/.config/sops/age/keys.txt。")
+    out = []
+    for s in yaml.safe_load(text) or []:
+        if not s.get("name") or not s.get("url"):
+            die("订阅清单的每一项都要有 name 与 url。")
+        out.append({
+            "name": s["name"],
+            "key": provider_key(s["name"]),
+            "url": s["url"],
+            "summary": bool(s.get("summary")),
+        })
+    if sum(s["summary"] for s in out) != 1:
+        die("订阅清单里要恰好一项 summary: true（汇总订阅）。")
+    return out
 
 
 # ---------------------------------------------------------------- 命令
@@ -350,30 +374,57 @@ DEFAULT_SECRETS = ("", "set-your-secret")
 MARKER = "netsel setup"  # 生成的 Script.js 里带这个字样，用来判断是不是用户自己的脚本
 
 
-def render_script():
-    with open(os.path.join(VERGE, "profiles.yaml")) as f:
-        items = (yaml.safe_load(f) or {}).get("items") or []
-    found = []
-    for pat, name, key in KNOWN_SUBS:
-        for it in items:
-            if it.get("type") == "remote" and (
-                pat.search(str(it.get("name") or "")) or pat.search(it.get("url") or "")
-            ):
-                found.append({"name": name, "key": key, "url": it["url"]})
-                break
-    # Verge 的全局脚本会在每份订阅上运行。只在 JMS 上启用 netsel 汇总分流；
-    # 没有 JMS 时脚本对所有订阅都不改写，保证新加的救急订阅始终能直接选节点。
-    jms_pattern = next(pat for pat, _, key in KNOWN_SUBS if key == "jms")
-    managed_name = None
-    for it in items:
-        if it.get("type") == "remote" and jms_pattern.search(str(it.get("name") or "")):
-            managed_name = it["name"]
-            break
+def verge_remotes():
+    """Verge 里导入的远程订阅。Verge 随时可能在重写 profiles.yaml，读到半截时当作空。"""
+    try:
+        with open(os.path.join(VERGE, "profiles.yaml")) as f:
+            items = (yaml.safe_load(f) or {}).get("items") or []
+    except (OSError, yaml.YAMLError):
+        return []
+    return [it for it in items if it.get("type") == "remote"]
+
+
+def render_script(subs):
+    # Verge 的全局脚本会在每份订阅上运行，按 Verge 里的订阅名区分。只在汇总订阅上启用
+    # netsel 分流；它还没导入时脚本对所有订阅都不改写，保证救急订阅始终能直接选节点。
+    # 按 URL 认订阅：Verge 给订阅起的名字（如 jms-1265282.yaml）不可控。
+    summary = next(s for s in subs if s["summary"])
+    managed_name = next((it.get("name") for it in verge_remotes() if it.get("url") == summary["url"]), None)
+    found = [{k: s[k] for k in ("name", "key", "url")} for s in subs]
     with open(TEMPLATE) as f:
-        js = (f.read()
-              .replace("__SUBS__", json.dumps(found, ensure_ascii=False, indent=2))
-              .replace("__NETSEL_PROFILE__", json.dumps(managed_name, ensure_ascii=False)))
-    return js, [s["name"] for s in found]
+        return (f.read()
+                .replace("__SUBS__", json.dumps(found, ensure_ascii=False, indent=2))
+                .replace("__NETSEL_PROFILE__", json.dumps(managed_name, ensure_ascii=False)))
+
+
+def sync_profiles(subs, do_import):
+    """清单里有、Verge 里没有的订阅，经 clash://install-config 让 Verge 自己导入——profiles.yaml
+    归 Verge 所有（它会整份重写），这里不直接写。Verge 里多出来的订阅只提示、不删：可能是
+    临时加的救急订阅。"""
+    want = {s["url"] for s in subs}
+    for it in verge_remotes():
+        if it.get("url") not in want:
+            print(c("33", f"Verge 里有清单之外的订阅「{it.get('name')}」，未改动；不需要的话在 GUI 里删掉。"))
+    have = {it.get("url") for it in verge_remotes()}
+    missing = [s for s in subs if s["url"] not in have]
+    if not missing:
+        return
+    if not do_import:
+        print("Verge 里缺少订阅：" + "、".join(s["name"] for s in missing) + "；执行 `netsel setup` 导入。")
+        return
+    for s in missing:
+        # 只能带 url 一个参数：Verge（2.5.10）把 url= 之后的全部内容当链接，再带 &name=… 会
+        # 被拼进订阅链接里。订阅名由 Verge 自己取（机场下发的名字），反正这里按 URL 认订阅。
+        q = urllib.parse.urlencode({"url": s["url"]})
+        print(f"导入订阅 {s['name']} …", end=" ", flush=True)
+        # deep link 在 Verge 未运行时会把它拉起来；PATH 的讲究同 cmd_setup 末尾的 open
+        env = dict(os.environ, PATH="/usr/bin:/bin:/usr/sbin:/sbin")
+        subprocess.run(["/usr/bin/open", "-g", f"clash://install-config?{q}"], env=env)
+        url = s["url"]
+        if wait(lambda: url in {it.get("url") for it in verge_remotes()}, 60):
+            print(c("32", "ok"))
+        else:
+            print(c("31", "60 秒内没出现在 Verge 里，下次 `netsel setup` 再试"))
 
 
 def read(path):
@@ -430,11 +481,15 @@ def cmd_setup(restart=True):
         print("netsel setup: 还没有 Clash Verge 配置目录（尚未首次启动），跳过。")
         return
 
+    subs = load_subs(wait_s=15)
+    # 先导入：生成脚本要用汇总订阅在 Verge 里的名字
+    sync_profiles(subs, do_import=restart)
+
     script_path = os.path.join(VERGE, "profiles", "Script.js")
-    js, names = render_script()
+    js = render_script(subs)
     writes = {}  # path → (新内容, 说明)
     if read(script_path) != js:
-        writes[script_path] = (js, "全局扩展脚本（分流：" + "、".join(names) + "）")
+        writes[script_path] = (js, "全局扩展脚本（分流：" + "、".join(s["name"] for s in subs) + "）")
 
     def clash(d):
         if not d.get("external-controller"):
