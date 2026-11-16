@@ -10,6 +10,7 @@
     den.aspects.dev.editor.vscode
     den.aspects.dev.editor.cursor
     den.aspects.service.remote.rustdesk
+    den.aspects.network.ssh.remote.ali-cloud
     den.aspects.dev.shell.multiplexer.rex
   ];
 
