@@ -402,6 +402,5 @@
     "liveServer.settings.donotVerifyTags": true,
     "liveServer.settings.donotShowInfoMsg": true,
     "claudeCode.hideOnboarding": true,
-    "editor.fontSize": 14,
     "terminal.integrated.fontSize": 14,
 }
