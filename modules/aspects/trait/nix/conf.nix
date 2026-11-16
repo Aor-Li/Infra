@@ -1,48 +1,62 @@
 { lib, ... }:
 let
-  common.nix.settings = {
-    experimental-features = lib.mkDefault [
-      "nix-command"
-      "flakes"
-    ];
+  cnMirrors = [
+    "https://mirror.sjtu.edu.cn/nix-channels/store"
+    "https://mirrors.ustc.edu.cn/nix-channels/store"
+    "https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store"
+  ];
 
-    # Plain `substituters` (not `extra-substituters`) so the CN mirrors are
-    # actually tried first: nixpkgs' own cache.nixos.org default is only
-    # mkDefault-priority, so this list fully replaces it in the merge instead
-    # of appending after it — otherwise cache.nixos.org keeps winning the
-    # priority tie-break (mirrors advertise the same priority=40 it does,
-    # since they mirror its nix-cache-info verbatim) purely by being first.
-    # cache.nixos.org is re-added explicitly at the end as a fallback.
-    substituters = [
-      "https://mirror.sjtu.edu.cn/nix-channels/store"
-      "https://mirrors.ustc.edu.cn/nix-channels/store"
-      "https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store"
-      "https://nix-community.cachix.org"
-      # nixpkgs cudaPackages（unfree，cache.nixos.org 不收）；darwin 上 CUDA 头文件只能从这里替换下载
-      "https://cache.nixos-cuda.org"
-      "https://cache.nixos.org/"
-    ];
+  common = settings: {
+    nix.settings = {
+      experimental-features = lib.mkDefault [
+        "nix-command"
+        "flakes"
+      ];
 
-    extra-trusted-public-keys = [
-      "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
-      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
-      "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
-    ];
+      # Plain `substituters` (not `extra-substituters`) so the CN mirrors are
+      # actually tried first: nixpkgs' own cache.nixos.org default is only
+      # mkDefault-priority, so this list fully replaces it in the merge instead
+      # of appending after it — otherwise cache.nixos.org keeps winning the
+      # priority tie-break (mirrors advertise the same priority=40 it does,
+      # since they mirror its nix-cache-info verbatim) purely by being first.
+      # cache.nixos.org is re-added explicitly at the end as a fallback.
+      substituters = lib.optionals settings.nix.conf.cnMirrors cnMirrors ++ [
+        "https://nix-community.cachix.org"
+        # nixpkgs cudaPackages（unfree，cache.nixos.org 不收）；darwin 上 CUDA 头文件只能从这里替换下载
+        "https://cache.nixos-cuda.org"
+        "https://cache.nixos.org/"
+      ];
+
+      extra-trusted-public-keys = [
+        "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
+        "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+        "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
+      ];
+    };
   };
 in
 {
   den.aspects.nix.conf = {
+    settings.cnMirrors = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        substituters 里把国内镜像（sjtu / ustc / tuna）排在最前。默认开；
+        在境外的机器（如 aor@ali-cloud）上关掉——镜像每次请求要 1s 以上，只留官方缓存。
+      '';
+    };
+
     nixos =
-      { pkgs, ... }:
-      lib.recursiveUpdate common {
+      { pkgs, settings, ... }:
+      lib.recursiveUpdate (common settings) {
         nix.package = pkgs.nix;
         nix.settings.trusted-users = [ "@wheel" ];
         nixpkgs.config.allowUnfree = true;
       };
 
     darwin =
-      { pkgs, ... }:
-      lib.recursiveUpdate common {
+      { pkgs, settings, ... }:
+      lib.recursiveUpdate (common settings) {
         nix.package = pkgs.nix;
         nix.settings.trusted-users = [ "@admin" ];
         nixpkgs.config.allowUnfree = true;
@@ -54,11 +68,12 @@ in
     homeManager =
       {
         pkgs,
+        settings,
         osConfig ? null,
         ...
       }:
       lib.mkIf (osConfig == null) (
-        lib.recursiveUpdate common {
+        lib.recursiveUpdate (common settings) {
           # standalone home-manager needs an explicit nix package to write nix.conf
           nix.package = pkgs.nix;
           # HM 只拿 nix.package 生成 nix.conf，不会把它装进 profile。非 NixOS 机器上
