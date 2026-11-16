@@ -35,6 +35,10 @@
           set-option -g allow-rename off
           # renumber when window closed
           set -g renumber-window on
+          # 让 nvim 等程序发出的 OSC 52 穿过 tmux 到外层终端，yank 直达本机剪贴板
+          set -g set-clipboard on
+          set -g allow-passthrough on
+          set -as terminal-features ',xterm-256color:clipboard'
           ###################################################################
           ###  Basic KeyBinds Settings                                    ###
           ###################################################################
