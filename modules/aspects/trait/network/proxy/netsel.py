@@ -239,12 +239,13 @@ def cmd_status(api, retest=True):
 
 def retest_groups(api, names):
     """测自动组而不是 select 组：mihomo 测完会按新结果重选，出口跟着刷新。
-    顺序有讲究：先并行测各订阅的节点（互不重叠），再测 AI 优选（前者的子集，错开以免挤占），
+    顺序有讲究：先并行测各订阅的节点（互不重叠），再测 AI 的三档（前者的子集，错开以免挤占），
     最后测两个 fallback——它们的成员是上面的组，要等成员选好了，测出来的存活才是真的。"""
     progress(True)
     with cf.ThreadPoolExecutor() as ex:
         list(ex.map(api.group_delay, [f"{n} 自动" for n in names]))
-    api.group_delay("AI 优选")
+    for g in ("AI 美国", "AI 非亚洲", "AI 兜底"):
+        api.group_delay(g)
     api.group_delay("自动容灾")
     api.group_delay("AI 自动")
     progress(False)

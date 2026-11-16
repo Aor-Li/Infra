@@ -10,7 +10,8 @@
 //   DGX   philoai 集群（ssh 网关在阿里云加速器后面），默认直连
 //   国内   GEOSITE cn / GEOIP CN，默认直连
 //   国外   其余流量；默认「自动容灾」：按订阅顺序取第一个可用订阅里延迟最低的节点
-//   AI    Claude / OpenAI 等不对香港开放的服务，默认在 JP/SG/US/TW 节点里测速选优，全挂时退到自动容灾
+//   AI    Claude / OpenAI 等不对香港开放的服务，按地区分三档逐级回落：美国 → 非亚洲 → 其余允许地区；
+//         HK/MO/CN/RU 永远不进（绝不退到不限地区的自动容灾，否则会从香港出去被 OpenAI 拦截）
 // 组名是 netsel 的 API，改名要同步改 netsel.py。
 
 const SUBS = __SUBS__;
@@ -20,7 +21,12 @@ const DGX_DOMAINS = ["philoai.xyz", "vegalb.com"];
 const TEST_URL = "https://www.gstatic.com/generate_204";
 // 订阅里用来展示流量 / 到期的假节点
 const INFO_NODES = "剩余流量|距离下次重置|套餐到期|过期时间|官网";
-const AI_REGIONS = "(?i)\\b(JP|SG|US|TW)\\b|日本|新加坡|美国|台湾";
+// 地区只按代码 / 中文名匹配，不按旗帜：有的订阅 TW 节点挂的是 🇨🇳
+const AI_US = "(?i)\\bUS\\b|美国";
+// AI 服务不支持的地区
+const AI_BLOCKED = "\\b(HK|MO|CN|RU)\\b|香港|澳门|中国|俄罗斯";
+// 能用但尽量不用的亚洲地区（延迟低，但更容易被风控）
+const ASIA = "\\b(JP|SG|TW|KR|MY|TH|VN|PH|ID|IN)\\b|日本|新加坡|台湾|韩国|马来|泰国|越南|菲律宾|印尼|印度";
 
 function main(config, profileName) {
   if (!NETSEL_PROFILE || profileName !== NETSEL_PROFILE) return config;
@@ -49,10 +55,27 @@ function main(config, profileName) {
     { name: "国外", type: "select", proxies: ["自动容灾", ...names] },
     { name: "AI", type: "select", proxies: ["AI 自动", "国外", ...names] },
     { name: "自动容灾", type: "fallback", proxies: names.map(auto), ...urlTest },
-    // AI 优选只认名字里带地区的节点；
-    // 它全挂时 AI 自动退到自动容灾，不至于没有出口
-    { name: "AI 自动", type: "fallback", proxies: ["AI 优选", "自动容灾"], ...urlTest },
-    { name: "AI 优选", type: "url-test", use: SUBS.map((s) => s.key), filter: AI_REGIONS, ...urlTest },
+    // 三档按顺序回落，每档内部测速选优：
+    //   AI 美国    名字带 US 的节点（JMS 节点名不带地区，进不了这一档）
+    //   AI 非亚洲  排除不支持地区与亚洲：欧洲节点，以及 JMS（出口多在 US/NL）
+    //   AI 兜底    只排除不支持地区，亚洲节点在这里才出现
+    // 不能退到自动容灾——它可能首选 HK 节点，OpenAI 会直接 403。
+    { name: "AI 自动", type: "fallback", proxies: ["AI 美国", "AI 非亚洲", "AI 兜底"], ...urlTest },
+    { name: "AI 美国", type: "url-test", use: SUBS.map((s) => s.key), filter: AI_US, ...urlTest },
+    {
+      name: "AI 非亚洲",
+      type: "url-test",
+      use: SUBS.map((s) => s.key),
+      "exclude-filter": `(?i)${AI_BLOCKED}|${ASIA}`,
+      ...urlTest,
+    },
+    {
+      name: "AI 兜底",
+      type: "url-test",
+      use: SUBS.map((s) => s.key),
+      "exclude-filter": `(?i)${AI_BLOCKED}`,
+      ...urlTest,
+    },
     ...SUBS.flatMap(({ name: n, key }) => [
       { name: n, type: "select", proxies: [auto(n)], use: [key] },
       { name: auto(n), type: "url-test", use: [key], ...urlTest },
