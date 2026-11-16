@@ -15,7 +15,7 @@
 **文件不存在时自动跳过**（`pathExists` 兜底），因此可以先只创建需要的那个。
 
 > 系统级刻意不使用 ssh host key 解密（`sops.age.sshKeyPaths = []`）——多数主机已按角色关闭 sshd
-> （见 [`network/ssh.nix`](../../network/ssh.nix)），没有可用的 host key。
+> （见 [`network/ssh/server.nix`](../../network/ssh/server.nix)），没有可用的 host key。
 
 ## 新增一个 secret
 

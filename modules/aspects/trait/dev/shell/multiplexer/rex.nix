@@ -67,11 +67,10 @@
 
         programs.rex = {
           enable = true;
-          # ssh guard 依赖 programs.ssh 接管 ~/.ssh/config，而本仓库目前不管理 ssh 客户端配置
-          # （各机器 ~/.ssh/config 手写）。关掉以免警告；需要时在该机器上跑一次
-          # `rex terminfo setup`，它会把 guard 加进手写的 ~/.ssh/config。
-          # terminfo 照常写进 ~/.terminfo，所以 ssh 进装了本 aspect 的机器时 xterm-rex 可用。
-          sshGuard = false;
+          # sshGuard 保持默认开：~/.ssh/config 由 network/ssh/client 的 programs.ssh 生成，
+          # guard 随之写进去——在 Rex 里 ssh 出去时把 TERM 换成 xterm-256color。
+          # terminfo 照常写进 ~/.terminfo，所以 ssh 进装了本 aspect 的机器时 xterm-rex 可用
+          # （要对它发 xterm-rex，把主机名写进 ~/.config/rex/terminfo-hosts）。
         };
 
         services.rex.enable = isLinux;
