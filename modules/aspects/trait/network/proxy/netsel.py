@@ -5,7 +5,7 @@
     netsel pick [组]       用 fzf 选择某个分组的出口；不带组名先选组
     netsel update          重新拉取所有订阅
     netsel setup           把 Clash Verge 收敛到仓库的配置：导入清单里缺的订阅、分流脚本、
-                           外部控制器、随机 secret；有差异且 Verge 在运行时会重启它（断网几秒）
+                           外部控制器；有差异且 Verge 在运行时会重启它（断网几秒）
     netsel setup --check   只列出待应用的变更，不做任何改动（switch 时由 activation 执行）
 
 switch 不会改动代理：网络只在你执行 `netsel setup` 时才会变。不一致时 switch 与 `netsel`
@@ -19,7 +19,6 @@ import concurrent.futures as cf
 import json
 import os
 import re
-import secrets
 import shutil
 import subprocess
 import sys
@@ -210,7 +209,9 @@ def cmd_status(api, retest=True):
         print()
     proxies = api.proxies()
     if "DGX" not in proxies:
-        die("当前配置没有 netsel 分流：可能选中了原生订阅；切回 JMS 汇总订阅，或执行 `netsel setup`。")
+        summary = next((s["name"] for s in load_subs() if s["summary"]), "汇总订阅") if os.path.exists(SUBSCRIPTIONS) else "汇总订阅"
+        die(f"当前激活的不是汇总订阅，没有 netsel 分流：在 Clash Verge 里选中 {summary}"
+            "（deep link 导入新订阅后 Verge 可能自动切到了它），或执行 `netsel setup`。")
     names = subs(proxies)
 
     if retest:
@@ -375,8 +376,12 @@ def cmd_update(api):
 # Verge 运行时把配置握在内存里，退出时还会写回磁盘，所以有差异时顺序必须是
 # 先退出 Verge → 再写文件 → 再启动，否则改动会被它覆盖掉。
 
+# 控制器 secret 不归 netsel 管，用 Verge 当时的值（Api 每次从 clash-verge.yaml 读）：
+#   - Verge 2.5.10 自己把控制器的 CORS 限死在它的几个来源，网页碰不到 127.0.0.1:9097；
+#   - 同用户的进程本来就能读 clash-verge.yaml，随机 secret 几乎不加防护；
+#   - Verge 启动时会把写进去的 secret 改回 set-your-secret，跟它抢只会每次都报差异、
+#     重启后用旧 secret 探测失败。
 CONTROLLER = "127.0.0.1:9097"
-DEFAULT_SECRETS = ("", "set-your-secret")
 MARKER = "netsel setup"  # 生成的 Script.js 里带这个字样，用来判断是不是用户自己的脚本
 
 
@@ -491,14 +496,12 @@ def plan_setup(subs):
     def clash(d):
         if not d.get("external-controller"):
             d["external-controller"] = CONTROLLER
-        if d.get("secret") in DEFAULT_SECRETS or d.get("secret") is None:
-            d["secret"] = secrets.token_urlsafe(24)
 
     def verge(d):
         d["enable_external_controller"] = True
 
     for name, fn, what in [
-        ("clash-verge.yaml", clash, "外部控制器地址 / 随机 secret"),
+        ("clash-verge.yaml", clash, "外部控制器地址"),
         ("verge.yaml", verge, "开启外部控制器"),
     ]:
         new = converge_yaml(os.path.join(VERGE, name), fn)
@@ -568,7 +571,7 @@ def cmd_setup():
         with open(path, "w") as f:
             f.write(text)
         if path == script_path or path.endswith("clash-verge.yaml"):
-            os.chmod(path, 0o600)  # 订阅 token / secret
+            os.chmod(path, 0o600)  # 订阅 token / 控制器 secret
         print(f"已更新：{what}")
 
     if was_running:
@@ -576,8 +579,8 @@ def cmd_setup():
         # scutil 而没接管系统 DNS——TUN 下只剩裸 IP 连接，按域名的分流全部落空。
         env = dict(os.environ, PATH="/usr/bin:/bin:/usr/sbin:/sbin")
         subprocess.run(["/usr/bin/open", "-g", "-a", "Clash Verge"], env=env)
-        api = Api()
-        if wait(lambda: probe(api), 30):
+        # 每次重新构造 Api：Verge 启动时可能改写 clash-verge.yaml（含 secret），要用它改完的值
+        if wait(lambda: probe(Api()), 30):
             print("Clash Verge 已重启，新配置生效。")
         else:
             print(c("33", "Clash Verge 已启动，但 30 秒内没连上控制器；稍后用 `netsel -n` 检查。"))

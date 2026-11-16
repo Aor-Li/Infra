@@ -19,9 +19,8 @@
 # activation 只跑 `netsel setup --check` 报告差异；真正应用由你手动 `netsel setup`。
 # 新机器第一次 switch 后，打开一次 Clash Verge，再执行一次 `netsel setup`。
 #
-# Verge 自己的配置（clash-verge.yaml / verge.yaml）只收敛 netsel 依赖的几项：外部控制器只听
-# 127.0.0.1，secret 若是默认值就换成随机值。secret 是本机凭据、不需要跨机器一致，所以不进 sops：
-# 生成一次后 Verge 自己保存，netsel 每次从 clash-verge.yaml 读，仓库里不出现它的值。
+# Verge 自己的配置（clash-verge.yaml / verge.yaml）只收敛 netsel 依赖的几项：开启外部控制器、
+# 只听 127.0.0.1。控制器 secret 不管，用 Verge 当时的值（理由见 netsel.py 的 CONTROLLER 处）。
 {
   den.aspects.network.proxy.clash = {
     darwin = {
