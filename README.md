@@ -37,6 +37,7 @@ modules/
 | Kuregumo | aarch64-linux | vm | laptop | nixos | desktop + app |
 | Tobimune | x86_64-linux | none | server | nixos | （无） |
 | aor@philo | x86_64-linux | — | standalone home | Ubuntu | （无） |
+| aor@ali-cloud | x86_64-linux | — | standalone home | Ubuntu | （无） |
 
 ## 常用命令
 

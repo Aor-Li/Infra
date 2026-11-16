@@ -63,4 +63,9 @@
   den.homes.x86_64-linux."aor@philo" = {
     email = "liyifeng@philoai.com";
   };
+
+  # 同事开的阿里云机器（美国区）。settings 见 aspects/entity/homes/aor@ali-cloud。
+  den.homes.x86_64-linux."aor@ali-cloud" = {
+    email = "liyifeng@philoai.com";
+  };
 }
