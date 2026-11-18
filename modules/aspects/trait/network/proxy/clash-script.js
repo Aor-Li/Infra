@@ -26,6 +26,10 @@ const NETSEL_PROFILE = __NETSEL_PROFILE__;
 const ALICLOUD = __ALICLOUD__;
 
 const TURBOAI_DOMAINS = ["philoai.xyz", "vegalb.com"];
+// AI 服务的静态下载 CDN（ChatGPT / Codex 安装包等，几百 MB）。GEOSITE category-ai-!cn 会把它们分到 AI 线，
+// 而 AI 线按延迟选中的美国专线带宽极小（实测 0.2MB/s，brew 装 chatgpt 时下到一半断流）。
+// 这些 CDN 不按地区拦截（经澳门节点实测 200、14MB/s），改走国外线
+const AI_CDN_DOMAINS = ["oaistatic.com"];
 const TEST_URL = "https://www.gstatic.com/generate_204";
 // AI 线的健康检查：不带 key 访问 Anthropic API，连得上时返回 401。只测 gstatic 会把「能上网但到不了
 // Anthropic」的节点当成可用而一直选着它（实际碰到过）。它分辨不了地区——香港节点同样返回 401，
@@ -117,6 +121,7 @@ function main(config, profileName) {
     "GEOSITE,private,DIRECT",
     "GEOIP,private,DIRECT,no-resolve",
     "IP-CIDR,100.64.0.0/10,DIRECT,no-resolve", // tailscale
+    ...AI_CDN_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},国外`),
     "GEOSITE,category-ai-!cn,AI",
     "GEOSITE,geolocation-!cn,国外",
     "GEOSITE,cn,国内",
