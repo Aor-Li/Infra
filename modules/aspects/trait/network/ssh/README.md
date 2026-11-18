@@ -67,6 +67,8 @@ sops --config modules/aspects/trait/security/secrets/.sops.yaml \
 封装，见 [TurboAI](../../../entity/homes/aor@turbo-ai/ssh.nix)。`config` 字段保留完整 Host 块，
 `identityFiles` 将密文字段映射到 `~/.ssh/` 下的文件名；框架只 Include 该目标的确切文件，
 不读取整个 `config.d`。这个构造器保留原始配置，下面的参数覆盖适用于 `provides.target`。
+需要按平台追加的指令（如 TurboAI 网关只在 macOS 上走 ssh-direct）不写进密文，由 entity
+在同一个 aspect 里另写 `homeManager`：密文先被 Include，OpenSSH 又取首次赋值，写进去就覆盖不了。
 
 ## 客户端差异
 
@@ -89,7 +91,7 @@ standalone 写到 `den.homes.<system>."<user>@<host>".settings`。
 ## 迁移与生效
 
 当前两台 Mac include TurboAI 和 AliCloud 的连接，并配置对应 Rex 隧道；
-`aor@turbo-ai` include AliCloud 的连接。SSH 别名与 home 配置名独立。新增目标或客户端关系后执行对应的系统或 Home
+`aor@turbo-ai` include AliCloud 的连接，`aor@ali-cloud` include TurboAI 的连接。SSH 别名与 home 配置名独立。新增目标或客户端关系后执行对应的系统或 Home
 Manager switch。Rex 的 SSH guard 由 Rex trait 注册。
 
 不再默认读取 `config.local` 或 `config.d/*`；其他机器首次切换前先迁入需要的目标。

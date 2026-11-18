@@ -10,6 +10,7 @@
 #   - /etc/nix/nix.conf 加 trusted-users = root aor，否则 aor 自己 nix.conf 里的
 #     substituters 会被 daemon 忽略
 #   - loginctl enable-linger aor，rex server（systemd user service）在 ssh 断开后继续跑
+#   - ~/.config/sops/age/keys.txt 放 aor 的 age 私钥（TurboAI 的 ssh 条目与私钥是密文）
 #
 # gitlab.gnome.org 拒绝这台机器的 IP（HTTP 406），stylix 的 gnome-shell input 拉不下来；
 # 该 input 的 rev 变了以后，在能访问的机器上 nix copy 过去：
@@ -19,6 +20,8 @@
   den.aspects."aor@ali-cloud".includes = [
     # 常驻个人 Rex server，Mac 端经 SSH 隧道连入（见 multiplexer/rex.nix）
     den.aspects.dev.shell.multiplexer.rex
+    # `ssh TurboAI` 等直接连公司集群（网关在 Linux 上直连，见 aor@turbo-ai/ssh.nix）
+    den.aspects."aor@turbo-ai".provides.ssh
   ];
 
   den.homes.x86_64-linux."aor@ali-cloud".settings = {
