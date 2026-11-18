@@ -49,7 +49,7 @@ in
     #     （host 内嵌的 home-manager 用户同样在这条 pipeline 里，也读 host.settings）
     #   homeConfigurations（standalone）           —— ctx 里有 home  → home.settings
     #
-    # 即「谁产出这份配置就读谁的 settings」，刻意不做级联。`aor@philo` 这种没有对应
+    # 即「谁产出这份配置就读谁的 settings」，刻意不做级联。`aor@turbo-ai` 这种没有对应
     # host 的 standalone home，den 只合成 `{ name = ...; }` 当 host 上下文，它没有
     # settings，正好落到 home。
     policies.settings-injection =

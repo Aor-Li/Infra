@@ -5,6 +5,7 @@ let
   # 密文（sops 加密的 yaml，可安全入库）与对应实体就近存放：
   #   系统级：entity/hosts/<hostName>/secrets.yaml
   #   用户级：entity/users/<userName>/secrets.yaml
+  #   SSH 连接：entity/{hosts,homes}/<entity>/ssh-secrets.yaml，由 entity 的连接定义显式指定 sopsFile。
   #
   # 解密后的明文落地位置沿用 sops-nix 默认值：
   #   系统级：/run/secrets/<name>       （tmpfs，重启即失）

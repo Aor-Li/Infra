@@ -9,13 +9,14 @@
 | --- | --- | --- | --- |
 | **系统级** | [`entity/hosts/<hostName>/secrets.yaml`](../../../entity/hosts) | `/var/lib/sops-nix/key.txt` | `/run/secrets/<name>`（tmpfs） |
 | **用户级** | [`entity/users/<userName>/secrets.yaml`](../../../entity/users) | `~/.config/sops/age/keys.txt` | `%r/secrets/<name>`（`%r` = `XDG_RUNTIME_DIR`） |
+| **SSH 目标** | [`entity/{hosts,homes}/<entity>/ssh-secrets.yaml`](../../../entity) | 同用户级 | 同用户级，由 entity 连接定义显式设置 `sopsFile` |
 
 密文文件按主机名 / 用户名自动匹配（见 [`secrets.nix`](secrets.nix)）：主机 `Enten` 找
 `entity/hosts/Enten/secrets.yaml`，用户 `aor` 找 `entity/users/aor/secrets.yaml`。
 **文件不存在时自动跳过**（`pathExists` 兜底），因此可以先只创建需要的那个。
 
 > 系统级刻意不使用 ssh host key 解密（`sops.age.sshKeyPaths = []`）——多数主机已按角色关闭 sshd
-> （见 [`network/ssh/server.nix`](../../network/ssh/server.nix)），没有可用的 host key。
+> （见 [`network/ssh/ssh.nix`](../../network/ssh/ssh.nix)），没有可用的 host key。
 
 ## 新增一个 secret
 
@@ -40,8 +41,9 @@ sops.secrets.anthropic_auth_token = { };
 
 ## 待办
 
-- 用户级目前只有 [`network/ssh/remote/`](../../network/ssh/remote) 在消费（ssh 私钥与 Host 条目）；
-  hosts 下还没有任何 secrets.yaml。
+- SSH 目标 [AliCloud](../../../entity/homes/aor@ali-cloud/ssh.nix) 和
+  [TurboAI](../../../entity/homes/aor@turbo-ai/ssh.nix) 的地址与私钥随 entity 分发。
+  `entity/users/aor/secrets.yaml` 保留 Clash 订阅清单；hosts 下还没有 secrets.yaml。
 - [`dev/ai/claude.nix`](../../dev/ai/claude.nix) 的 provider 认证（`ANTHROPIC_AUTH_TOKEN`）
   待接 sops。
 - [`network/tailscale.nix`](../../network/tailscale.nix) 待用 `authKeyFile` 免交互入网。

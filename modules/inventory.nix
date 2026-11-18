@@ -59,13 +59,13 @@
   ##########################################
 
   # 公司集群上的 Ubuntu 节点：没有对应 host，den 只合成 { name; system } 当 host 上下文。
-  # 具体的 settings 与 includes 见 aspects/entity/homes/aor@philo。
-  den.homes.x86_64-linux."aor@philo" = {
+  # 具体的 settings 与 includes 见 aspects/entity/homes/aor@turbo-ai。
+  den.homes.x86_64-linux."aor@turbo-ai" = {
     email = "liyifeng@philoai.com";
   };
 
-  # 同事开的阿里云机器（美国区）。settings 见 aspects/entity/homes/aor@AliCloud。
-  den.homes.x86_64-linux."aor@AliCloud" = {
+  # 同事开的阿里云机器（美国区）。settings 见 aspects/entity/homes/aor@ali-cloud。
+  den.homes.x86_64-linux."aor@ali-cloud" = {
     email = "liyifeng@philoai.com";
   };
 }

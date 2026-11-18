@@ -4,7 +4,7 @@
 # Usage: ./scripts/bootstrap.sh <name>
 #   <name> is an attribute under nixosConfigurations / darwinConfigurations /
 #   homeConfigurations, e.g. Enten (NixOS), Kumeyuri (nix-darwin), or
-#   aor@philo (standalone home-manager profile).
+#   aor@turbo-ai (standalone home-manager profile).
 #
 # On nixos/darwin hosts home-manager runs as a system module, so the system
 # switch activates the users' homes too; homeConfigurations only holds

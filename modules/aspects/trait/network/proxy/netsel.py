@@ -37,7 +37,7 @@ TEMPLATE = "@template@"
 SUBSCRIPTIONS = "@subscriptions@"  # sops 解密后的订阅清单
 TEST_URL = "https://www.gstatic.com/generate_204"
 LINES = ["TurboAI", "AliCloud", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
-# 按 ssh 登录实测连通性的分流线 → 测哪个 ssh 别名（来自 network/ssh/remote/，经 sops 落到 ~/.ssh/config.d/）
+# 按 ssh 登录实测连通性的分流线 → 测哪个 ssh 别名（来自对应 home entity 的 provides.ssh，经 SOPS 解密）
 SSH_LINES = {"TurboAI": "TurboAI-gw", "AliCloud": "AliCloud"}
 SSH = "/usr/bin/ssh"  # activation 的 PATH 里没有 ssh
 
@@ -390,7 +390,7 @@ def cmd_tune(api, group="AliCloud", rounds=3):
         die(f"只有 {', '.join(SSH_LINES)} 能按 ssh 实测调出口")
     cfg = ssh_config(host)
     if cfg is None:
-        die(f"~/.ssh/config 里没有 {host}：本机没 include network.ssh.remote.{group}？")
+        die(f"~/.ssh/config 里没有 {host}：请检查本机是否 include 了对应 home entity 的 provides.ssh")
     if "ssh-direct" in cfg.get("proxycommand", ""):
         die(f"{host} 经 ssh-direct 直连，不经过 Clash，调 {group} 线没有意义")
     proxies = api.proxies()

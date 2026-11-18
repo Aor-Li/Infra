@@ -9,7 +9,7 @@
 # 物理网卡取 scutil 的 PrimaryInterface（Clash TUN 不会抢它），换有线 / Wi-Fi 无需改配置。
 # 解析失败时退回普通 nc（走 Clash），只在 stderr 提示，不让连接直接失败。
 #
-# 用法（写在手写的 ~/.ssh/config.local 或 remote/ 的 config 条目里）：在需要直连的那一跳上加
+# 用法：在需要直连的 SSH 目标 aspect 中配置 ProxyCommand，生成的指令为
 #     ProxyCommand /etc/profiles/per-user/aor/bin/ssh-direct %h %p
 # 写绝对路径是因为 launchd agent（如 rex 隧道）的 PATH 里没有用户 profile。
 {

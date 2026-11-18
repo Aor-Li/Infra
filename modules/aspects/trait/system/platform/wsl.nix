@@ -7,7 +7,7 @@
 
   # 只有 WSL 主机才 import nixos-wsl 模块；其它 nixos 主机连选项都不该多出来。
   # aspect 函数按 host 求值，所以这里用 optionalAttrs 而不是 module 系统的 mkIf
-  # （imports 不能放进 mkIf）。`or null`：standalone home（如 aor@philo）的 host 只是
+  # （imports 不能放进 mkIf）。`or null`：standalone home（如 aor@turbo-ai）的 host 只是
   # 合成的 { name; system }，没有 virt / distro，而这个函数在 home scope 也会被调用。
   den.aspects.system.platform.wsl =
     { host, ... }:

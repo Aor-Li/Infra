@@ -9,7 +9,7 @@
         description = ''
           由 home-manager 接管 XDG 用户目录：生成 ~/.config/user-dirs.dirs 并在激活时
           创建 Desktop / Documents / Downloads / Music / Pictures / Public / Templates /
-          Videos。默认开启；纯服务器用途的 home（如 aor@philo）用不到这些目录，关掉。
+          Videos。默认开启；纯服务器用途的 home（如 aor@turbo-ai）用不到这些目录，关掉。
         '';
       };
     };

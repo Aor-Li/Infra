@@ -36,17 +36,16 @@ modules/
 | Kumeyuri | aarch64-darwin | none | laptop | darwin | aerospace + app |
 | Kuregumo | aarch64-linux | vm | laptop | nixos | desktop + app |
 | Tobimune | x86_64-linux | none | server | nixos | （无） |
-| aor@philo | x86_64-linux | — | standalone home | Ubuntu | （无） |
-| aor@AliCloud | x86_64-linux | — | standalone home | Ubuntu | （无） |
+| aor@turbo-ai | x86_64-linux | — | standalone home | Ubuntu | Rex + hwstat + AliCloud SSH |
+| aor@ali-cloud | x86_64-linux | — | standalone home | Ubuntu 24.04 | Rex |
 
 ## 常用命令
 
 ```console
 # 首次激活一台机器 / 一个 home
 ./scripts/bootstrap.sh Enten          # nixos-rebuild（home-manager 随系统一起激活）
-./scripts/bootstrap.sh aor@philo      # 只有 home-manager
-# macOS：switch 不改动代理。打开一次 Clash Verge 后执行，让它收敛到 sops 里的订阅清单
-netsel setup
+./scripts/bootstrap.sh aor@turbo-ai   # Turbo AI 的 home-manager 配置
+./scripts/bootstrap.sh aor@ali-cloud  # 阿里云的 home-manager 配置
 
 # 修改 flake 依赖后，重新生成根 flake.nix
 nix run .#write-flake

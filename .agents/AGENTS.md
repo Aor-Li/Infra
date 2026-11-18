@@ -39,7 +39,15 @@ entity 里写一行就够：
 den.aspects.Enten.includes = [ den.aspects.desktop ];  # 系统侧 + home 侧
 ```
 
-standalone（`den.homes`）只留给没有 den host 的机器（如集群上的 Ubuntu `aor@philo`）。
+SSH 连接身份跟随所属 entity：系统主机放 `entity/hosts/<Name>/ssh.nix`，
+standalone home 放 `entity/homes/<user>@<name>/ssh.nix`，密文放各自目录的 `ssh-secrets.yaml`。
+entity 调用 `den.aspects.network.ssh.provides` 下的通用构造器，提供自身的 `.provides.ssh`；
+客户端显式 include，例如 `den.aspects."aor@ali-cloud".provides.ssh`。
+仅定义或 include entity 自身不会自动 include 它提供的连接 aspect。
+配置生成、SOPS 分发等实现留在 `trait/network/ssh/`。新增连接身份或客户端差异时见
+该目录的 `README.md`。
+
+standalone（`den.homes`）只留给没有 den host 的机器（如集群上的 Ubuntu `aor@turbo-ai`）。
 trait 里只对 standalone 成立的配置（自己写 nix.conf、装 HM CLI 等）用
 `osConfig == null` 门控。
 

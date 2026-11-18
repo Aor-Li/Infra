@@ -1,8 +1,8 @@
-# 同事开的阿里云 ECS（Ubuntu 24.04，x86_64，美国区）上的 standalone home（den.homes."aor@AliCloud"）。
+# 同事开的阿里云 ECS（Ubuntu 24.04，x86_64，美国区）上的 standalone home（den.homes."aor@ali-cloud"）。
 #
 # hostname 是阿里云生成的 iZ… 串，机器归同事，不去改它；所以 switch 时要写明名字：
-#   home-manager switch --flake ~/Infra#aor@AliCloud
-# 从别的机器连过来：entity 里 include den.aspects.network.ssh.remote.AliCloud。
+#   home-manager switch --flake ~/Infra#aor@ali-cloud
+# 从别的机器连过来：entity 里 include den.aspects."aor@ali-cloud".provides.ssh。
 #
 # home-manager 管不到的系统层是装机时手工做的（root 执行）：
 #   - useradd -m -s /bin/bash aor；~aor/.ssh/authorized_keys 放 AliCloud.pem 的公钥
@@ -16,12 +16,12 @@
 #   nix copy --to ssh-ng://AliCloud <inputs.stylix.inputs.gnome-shell.outPath>
 { den, ... }:
 {
-  den.aspects."aor@AliCloud".includes = [
+  den.aspects."aor@ali-cloud".includes = [
     # 常驻个人 Rex server，Mac 端经 SSH 隧道连入（见 multiplexer/rex.nix）
     den.aspects.dev.shell.multiplexer.rex
   ];
 
-  den.homes.x86_64-linux."aor@AliCloud".settings = {
+  den.homes.x86_64-linux."aor@ali-cloud".settings = {
     # 在美国，国内镜像比官方缓存慢一个数量级
     nix.conf.cnMirrors = false;
     # 服务器用途，不要 Music / Videos / Public 这些 XDG 用户目录

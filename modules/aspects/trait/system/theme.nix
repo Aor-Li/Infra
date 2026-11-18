@@ -61,7 +61,7 @@ in
         stylix.targets.hyprland.enable = false;
 
         # gtk / gnome target 会写 dconf，而 standalone home 只用在没有 den host 的服务器上，
-        # 没有图形会话，也不一定装了 dconf-service（aor@AliCloud 就没有，激活卡在
+        # 没有图形会话，也不一定装了 dconf-service（aor@ali-cloud 就没有，激活卡在
         # dconfSettings：ca.desrt.dconf 未提供）。真有桌面的 standalone 机器自己改回 true。
         dconf.enable = lib.mkIf (osConfig == null) (lib.mkDefault false);
       };

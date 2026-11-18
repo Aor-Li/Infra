@@ -1,24 +1,25 @@
-# 公司集群 Ubuntu 节点上的 standalone home（den.homes."aor@philo"）。
+# Turbo AI 集群 Ubuntu 节点上的 standalone home（den.homes."aor@turbo-ai"）。
 #
 # 它没有 den host，host 侧的 includes / host-aspects 到不了这里；den 会把 host 限定的
-# 用户 aspect `den.aspects."aor@philo"` 叠加在 `den.aspects.aor` 之上应用，个体差异写在这。
+# 用户 aspect `den.aspects."aor@turbo-ai"` 叠加在 `den.aspects.aor` 之上应用，个体差异写在这。
 #
-# 目前只在 dgx0030 上 switch，所以这份配置事实上就是「dgx0030 上的 home」。要在第二台
-# 节点上 switch 且两边该有不同配置时，再拆出 `aor@<hostname>`（home-manager 不带 #名字
-# 时会自动找 $USER@$(hostname)）。
+# 目前只在 dgx0030 上 switch。turbo-ai 是配置名，不改系统 hostname；使用时显式传
+# --flake .#aor@turbo-ai。其他节点需要不同配置时，再拆独立 home。
 #
-# settings 必须填在实体路径 den.homes.… 上，而不是 den.aspects."aor@philo".settings
+# settings 必须填在实体路径 den.homes.… 上，而不是 den.aspects."aor@turbo-ai".settings
 # （那只是声明槽，见 meta/aspect-settings/_lib/lint.nix）。
 { den, lib, ... }:
 {
-  den.aspects."aor@philo".includes = [
+  den.aspects."aor@turbo-ai".includes = [
+    # 本机需要访问的 SSH 目标；连接配置和 PEM 随目标一起分发。
+    den.aspects."aor@ali-cloud".provides.ssh
     # 常驻个人 Rex server，Mac 端经 SSH 隧道连入（见 multiplexer/rex.nix）
     den.aspects.dev.shell.multiplexer.rex
     # 集群节点 CPU / GPU 占用一览
     den.aspects.dev.ops.hwstat
   ];
 
-  den.homes.x86_64-linux."aor@philo".settings = {
+  den.homes.x86_64-linux."aor@turbo-ai".settings = {
     # 服务器用途，不要 Music / Videos / Public 这些 XDG 用户目录
     system.xdg.userDirs = false;
 
