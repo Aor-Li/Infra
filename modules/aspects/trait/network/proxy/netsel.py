@@ -2,9 +2,14 @@
 
     netsel                 总览：各分流线的当前出口、订阅状态、连通性（会先测一轮延迟）
     netsel -n              总览，但不重新测速（用 mihomo 上次的结果）
+    netsel fix             网络不好用时一键修：update，再 tune 所有分流线，最后显示总览
     netsel pick [组]       用 fzf 选择某个分组的出口；不带组名先选组
-    netsel tune            给 AliCloud 线挑出口：逐个候选实测 `ssh AliCloud` 登录耗时，选最快的
-    netsel update          重新拉取所有订阅
+    netsel tune [线]       按需给分流线调出口（不带线名则全部），只在当前出口不通或明显更差时才换：
+                             国内 / 国外 / AI  逐个候选实测该线的目标站；默认的自动组可用就用它，
+                                               不可用时钉到实测最好的候选（AI 只会回到 AI 自动，
+                                               其余候选可能从香港出去，不自动选）
+                             TurboAI / AliCloud  逐个候选实测 ssh 登录耗时（mihomo 只会测 HTTP）
+    netsel update          重新拉取所有订阅；直连拉不下来的，依次借各订阅的节点重试
     netsel setup           把 Clash Verge 收敛到仓库的配置：导入清单里缺的订阅、分流脚本、
                            外部控制器；有差异且 Verge 在运行时会重启它（断网几秒）
     netsel setup --check   只列出待应用的变更，不做任何改动（switch 时由 activation 执行）
@@ -36,7 +41,22 @@ VERGE = os.path.expanduser(
 TEMPLATE = "@template@"
 SUBSCRIPTIONS = "@subscriptions@"  # sops 解密后的订阅清单
 TEST_URL = "https://www.gstatic.com/generate_204"
+# AI 线的健康检查，与 clash-script.js 的同名常量一致（mihomo 按 URL 字符串区分测速记录）：
+# 不带 key 访问 Anthropic API，连得上时返回 401。分辨不了地区（香港节点也返回 401）
+AI_TEST = "https://api.anthropic.com/v1/models"
+AI_EXPECT = "401"
+AI_TIERS = ["AI 美国", "AI 非亚洲", "AI 兜底"]
+ROUTE = "订阅更新"  # mihomo 拉订阅走的组，见 clash-script.js
 LINES = ["TurboAI", "AliCloud", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
+# 按 HTTP 实测连通性的分流线 → (目标 URL, 期望状态码)
+HTTP_LINES = {
+    "国内": ("https://www.baidu.com", None),
+    "国外": (TEST_URL, None),
+    "AI": (AI_TEST, AI_EXPECT),
+}
+# tune 只会自动切到这些候选（不在表里的线不限）。AI 的其余候选（国外、各订阅）可能从香港出去，
+# 测速又分辨不了地区，只能由你用 `netsel pick AI` 手动选
+TUNE_ONLY = {"AI": ["AI 自动"]}
 # 按 ssh 登录实测连通性的分流线 → 测哪个 ssh 别名（来自对应 home entity 的 provides.ssh，经 SOPS 解密）
 SSH_LINES = {"TurboAI": "TurboAI-gw", "AliCloud": "AliCloud"}
 SSH = "/usr/bin/ssh"  # activation 的 PATH 里没有 ssh
@@ -119,8 +139,11 @@ class Api:
     def providers(self):
         return self.call("GET", "/providers/proxies")["providers"]
 
-    def group_delay(self, group, timeout_ms=3000):
-        q = urllib.parse.urlencode({"url": TEST_URL, "timeout": timeout_ms})
+    def group_delay(self, group, url=TEST_URL, expected=None, timeout_ms=3000):
+        """url / expected 要与组自己的健康检查一致，测完 mihomo 才会按新结果重选。"""
+        q = urllib.parse.urlencode(
+            {"url": url, "timeout": timeout_ms, **({"expected": expected} if expected else {})}
+        )
         try:
             return self.call(
                 "GET", f"/group/{urllib.parse.quote(group)}/delay?{q}", timeout=30
@@ -128,8 +151,10 @@ class Api:
         except urllib.error.HTTPError:
             return {}  # 整组全挂时 mihomo 返回 503
 
-    def delay(self, name, url, timeout_ms=5000):
-        q = urllib.parse.urlencode({"url": url, "timeout": timeout_ms})
+    def delay(self, name, url, expected=None, timeout_ms=5000):
+        q = urllib.parse.urlencode(
+            {"url": url, "timeout": timeout_ms, **({"expected": expected} if expected else {})}
+        )
         try:
             r = self.call("GET", f"/proxies/{urllib.parse.quote(name)}/delay?{q}")
             return r.get("delay")
@@ -225,16 +250,12 @@ def cmd_status(api, retest=True):
         proxies = api.proxies()
 
     # 连通性：分流线逐条实测（经 mihomo 的出口），SSH_LINES 另测真实 ssh 登录
-    targets = {
-        "国内": "https://www.baidu.com",
-        "国外": TEST_URL,
-        "AI": "https://api.anthropic.com",
-    }
     with cf.ThreadPoolExecutor() as ex:
-        futs = {k: ex.submit(api.delay, k, u) for k, u in targets.items()}
+        futs = {k: ex.submit(api.delay, k, u, e) for k, (u, e) in HTTP_LINES.items()}
         ssh_futs = {k: ex.submit(probe_ssh, h) for k, h in SSH_LINES.items()}
         reach = {k: f.result() for k, f in futs.items()}
         ssh_res = {k: f.result() for k, f in ssh_futs.items()}
+    broken = [k for k, d in reach.items() if not d] + [k for k, (ok, _) in ssh_res.items() if ok is False]
 
     print(c("1", f"  {pad('分流', 9)} {pad('出口', 50)}  连通性"))
     for line in LINES:
@@ -244,10 +265,12 @@ def cmd_status(api, retest=True):
         if leaf.get("type") not in ("Direct", "Reject") and ch[-1] not in ("DIRECT",):
             path += f" ({fmt_delay(last_delay(leaf))})"
         if line in SSH_LINES:
-            r = ssh_res[line]
+            r = ssh_res[line][1]
         else:
-            r = f"{targets[line].split('//')[1]:<18} {fmt_delay(reach[line])}"
+            r = f"{HTTP_LINES[line][0].split('/')[2]:<18} {fmt_delay(reach[line])}"
         print(f"  {pad(line, 9)} {pad(path, 50)}  {r}")
+    if broken:
+        print(c("33", f"  {'、'.join(broken)} 不通：执行 `netsel fix`（更新订阅并重新调出口）"))
 
     print()
     print(c("1", "订阅"))
@@ -281,10 +304,10 @@ def retest_groups(api, names):
     progress(True)
     with cf.ThreadPoolExecutor() as ex:
         list(ex.map(api.group_delay, [f"{n} 自动" for n in names]))
-    for g in ("AI 美国", "AI 非亚洲", "AI 兜底"):
-        api.group_delay(g)
+    for g in AI_TIERS:
+        api.group_delay(g, AI_TEST, AI_EXPECT)
     api.group_delay("自动容灾")
-    api.group_delay("AI 自动")
+    api.group_delay("AI 自动", AI_TEST, AI_EXPECT)
     progress(False)
 
 
@@ -324,12 +347,13 @@ def ssh_login(host):
 
 
 def probe_ssh(host):
+    """(是否登录成功——未配置时为 None, 展示文本)"""
     cfg = ssh_config(host)
     if cfg is None:
-        return c("2", f"ssh {host} 未配置")
+        return None, c("2", f"ssh {host} 未配置")
     via = "ssh-direct" if "ssh-direct" in cfg.get("proxycommand", "") else "经 Clash"
     ms = ssh_login(host)
-    return f"ssh {host} [{via}] " + (c("32" if ms < 3000 else "33", f"{ms}ms 登录") if ms else c("31", "失败"))
+    return bool(ms), f"ssh {host} [{via}] " + (c("32" if ms < 3000 else "33", f"{ms}ms 登录") if ms else c("31", "失败"))
 
 
 def alicloud_hosts():
@@ -382,56 +406,203 @@ def cmd_pick(api, group=None):
     print(f"{group} → {choice}")
 
 
-def cmd_tune(api, group="AliCloud", rounds=3):
+# ---------------------------------------------------------------- tune / update / fix
+#
+# 打分统一是（失败次数, 成功耗时的中位数），越小越好。
+
+
+def score(times, rounds):
+    ok = sorted(t for t in times if t)
+    return rounds - len(ok), ok[len(ok) // 2] if ok else float("inf")
+
+
+def fmt_score(s, rounds, slow):
+    fails, med = s
+    if fails >= rounds:
+        return c("31", "全部失败")
+    return c("32" if med < slow else "33", f"{med}ms") + (c("31", f"  失败 {fails}") if fails else "")
+
+
+def clearly_better(a, b, min_gain):
+    """a 比 b 明显好：失败更少，或同样失败次数下快 20% 以上且至少快 min_gain 毫秒。
+    差不多时不换，免得掐断走在当前出口上的长连接。"""
+    if a[0] != b[0]:
+        return a[0] < b[0]
+    return b[1] - a[1] >= max(min_gain, 0.2 * b[1])
+
+
+def report(line, target, orig):
+    """打印调整结果，返回出口是否变了。"""
+    if target == orig:
+        print(f"  {c('1', line)} 保持 {orig}")
+    else:
+        print(f"  {c('1', line)} → {target}（原来是 {orig}）")
+    return target != orig
+
+
+def tune_http(api, line, rounds=3):
+    """候选都是 mihomo 的组或 DIRECT，直接对候选测延迟，不用切换分组。
+    默认候选（排第一的自动组 / DIRECT）稳定可用就用它：自动组自己会在节点间容灾，
+    钉在某个订阅上反而没了容灾。它不可用时才钉到实测最好的候选。"""
+    url, expected = HTTP_LINES[line]
+    g = api.proxies()[line]
+    cands, orig = g["all"], g["now"]
+
+    def measure(cand):
+        return score([api.delay(cand, url, expected) for _ in range(rounds)], rounds)
+
+    with cf.ThreadPoolExecutor() as ex:
+        scores = dict(zip(cands, ex.map(measure, cands)))
+    proxies = api.proxies()
+    for cand in cands:
+        mark = "●" if cand == orig else " "
+        leaf = " → ".join(short(x) for x in chain(proxies, cand)[1:])
+        print(f"    {mark} {pad(cand, 12)} {pad(fmt_score(scores[cand], rounds, 500), 16)} {c('2', leaf)}")
+    default = cands[0]
+    allowed = [x for x in cands if x == orig or x in TUNE_ONLY.get(line, cands)]
+    best = min(allowed, key=scores.get)
+    if scores[default][0] == 0:
+        target = default
+    elif scores[best][0] < rounds:
+        target = best
+    else:
+        hint = "；可以用 `netsel pick` 手动选" if line in TUNE_ONLY else ""
+        print(c("31", f"  {line} 能自动选的候选（{'、'.join(allowed)}）都不通，保持 {orig}{hint}"))
+        return False
+    if target != default and not clearly_better(scores[target], scores[orig], 50):
+        target = orig  # 默认出口不可用时，当前出口与最好的差不多就不动
+    api.select(line, target)
+    changed = report(line, target, orig)
+    if target != default:
+        print(c("33", f"  {line} 的默认出口 {default} 不可用，暂时钉在 {target}；恢复后再执行一次 `netsel tune`"))
+    return changed
+
+
+def tune_ssh(api, line, rounds=3):
     """mihomo 的测速只发 HTTP，测不了 ssh，所以这里自己测：把分组依次切到每个候选，各登录
-    rounds 次，按（失败次数，中位数）排序选最好的。新出口只对新连接生效。"""
-    host = SSH_LINES.get(group)
-    if not host:
-        die(f"只有 {', '.join(SSH_LINES)} 能按 ssh 实测调出口")
+    rounds 次。代理本身不通的候选先筛掉（DIRECT 在国内测不了 gstatic，不筛），省掉 ssh 超时。"""
+    host = SSH_LINES[line]
     cfg = ssh_config(host)
     if cfg is None:
-        die(f"~/.ssh/config 里没有 {host}：请检查本机是否 include 了对应 home entity 的 provides.ssh")
+        print(c("2", f"  {line} 跳过：~/.ssh/config 里没有 {host}（本机没 include 对应 home entity 的 provides.ssh）"))
+        return False
     if "ssh-direct" in cfg.get("proxycommand", ""):
-        die(f"{host} 经 ssh-direct 直连，不经过 Clash，调 {group} 线没有意义")
-    proxies = api.proxies()
-    g = proxies.get(group) or die(f"没有分组 {group}，先执行 `netsel setup`")
-    orig = g["now"]
-    print(c("1", f"实测 ssh {host} 登录（每个出口 {rounds} 次）"))
+        print(c("2", f"  {line} 跳过：{host} 经 ssh-direct 直连，不经过 Clash"))
+        return False
+    g = api.proxies()[line]
+    cands, orig = g["all"], g["now"]
+    with cf.ThreadPoolExecutor() as ex:
+        alive = dict(zip(cands, ex.map(
+            lambda x: x == "DIRECT" or bool(api.delay(x, TEST_URL, timeout_ms=3000)), cands)))
+    print(c("2", f"    实测 ssh {host} 登录（每个出口 {rounds} 次）"))
     scores = {}
     try:
-        for cand in g["all"]:
-            api.select(group, cand)
-            times = [ssh_login(host) for _ in range(rounds)]
-            ok = sorted(t for t in times if t)
-            fails = rounds - len(ok)
-            med = ok[len(ok) // 2] if ok else None
-            scores[cand] = (fails, med if med is not None else float("inf"))
+        for cand in cands:
+            mark = "●" if cand == orig else " "
+            if not alive[cand]:
+                scores[cand] = (rounds, float("inf"))
+                print(f"    {mark} {pad(cand, 12)} {c('31', '代理不通，跳过')}")
+                continue
+            api.select(line, cand)
+            times = []
+            for _ in range(rounds):
+                times.append(ssh_login(host))
+                if times.count(None) >= 2:  # 已经不可能胜出
+                    break
+            scores[cand] = score(times, rounds)
             leaf = " → ".join(short(x) for x in chain(api.proxies(), cand)[1:])
-            res = c("31", "全部失败") if not ok else (
-                c("32" if med < 3000 else "33", f"{med}ms") + (c("31", f"  失败 {fails}") if fails else ""))
-            print(f"  {pad(cand, 12)} {pad(res, 16)} {c('2', leaf)}")
+            print(f"    {mark} {pad(cand, 12)} {pad(fmt_score(scores[cand], rounds, 3000), 16)} {c('2', leaf)}")
     except BaseException:
-        api.select(group, orig)  # 中途 Ctrl-C / 出错时别把分组留在某个试探中的候选上
+        api.select(line, orig)  # 中途 Ctrl-C / 出错时别把分组留在某个试探中的候选上
         raise
-    best = min(scores, key=scores.get)
-    if scores[best][0] == rounds:
-        api.select(group, orig)
-        die(f"所有出口都登录失败，{group} 保持 {orig}")
-    api.select(group, best)
-    print(f"{group} → {best}" + ("（与原来相同）" if best == orig else f"（原来是 {orig}）"))
-    if best != orig:
+    best = min(cands, key=scores.get)
+    if scores[best][0] >= rounds:
+        api.select(line, orig)
+        print(c("31", f"  {line} 所有出口都登录失败，保持 {orig}"))
+        return False
+    target = best if clearly_better(scores[best], scores[orig], 300) else orig
+    api.select(line, target)
+    return report(line, target, orig)
+
+
+def cmd_tune(api, lines=None):
+    proxies = api.proxies()
+    lines = lines or LINES
+    for line in lines:
+        if line not in LINES:
+            die(f"没有分流线 {line}；可选：{', '.join(LINES)}")
+        if line not in proxies:
+            die(f"没有分组 {line}，先执行 `netsel setup`")
+    retest_groups(api, subs(proxies))  # 先让各自动组按最新测速重选，再比较候选
+    # HTTP 线在前：ssh 线的候选里有「国外」「AI 美国」，要等它们先调好
+    order = [x for x in HTTP_LINES if x in lines] + [x for x in SSH_LINES if x in lines]
+    changed = False
+    for line in order:
+        print(c("1", line))
+        changed |= (tune_http if line in HTTP_LINES else tune_ssh)(api, line)
+    if changed:
         print(c("2", "已建立的连接（如 Rex 隧道）仍走旧出口，断开重连后才换。"))
 
 
-def cmd_update(api):
-    names = subs(api.proxies())
-    for n in names:
-        print(f"更新 {n} …", end=" ", flush=True)
+def update_provider(api, name):
+    """更新一份订阅；成功返回 None，失败返回 mihomo 给的原因。"""
+    try:
+        api.call("PUT", f"/providers/proxies/{provider_key(name)}", timeout=60)
+        return None
+    except urllib.error.HTTPError as e:
         try:
-            api.call("PUT", f"/providers/proxies/{provider_key(n)}", timeout=60)
-            print(c("32", "ok"))
-        except urllib.error.HTTPError as e:
-            print(c("31", f"失败 {e.code}"))
+            return json.loads(e.read()).get("message") or f"HTTP {e.code}"
+        except ValueError:
+            return f"HTTP {e.code}"
+
+
+def cmd_update(api):
+    """mihomo 拉订阅走「订阅更新」组（默认直连）。直连失败的订阅，依次把这个组切到各订阅的
+    自动组再重试——借别家机场的节点去拉，自家的节点放在最后（它可能正是坏掉的那份）。
+    结束时切回原来的路线，日常的定时更新仍然直连。"""
+    proxies = api.proxies()
+    names = subs(proxies)
+    route = proxies.get(ROUTE)
+    if route is None:  # 旧脚本没有这个组：只能按 mihomo 默认的路线拉一次
+        print(c("33", f"当前配置没有「{ROUTE}」组，失败时无法换路线重试；执行 `netsel setup` 更新分流脚本。"))
+    routes = route["all"] if route else [None]
+    orig = route["now"] if route else None
+    pending, errors = list(names), {}
+    try:
+        for r in routes:
+            if not pending:
+                break
+            if r is not None:
+                if r != "DIRECT" and not any(api.group_delay(r).values()):
+                    continue  # 这条路线本身没有可用节点
+                api.select(ROUTE, r)
+            via = {"DIRECT": "直连", None: "按规则"}.get(r, f"经 {r}")
+            with cf.ThreadPoolExecutor() as ex:
+                res = dict(zip(pending, ex.map(lambda n: update_provider(api, n), pending)))
+            for n in list(pending):
+                if res[n] is None:
+                    print(f"  {pad(n, 8)} {c('32', 'ok')} {c('2', via)}")
+                    pending.remove(n)
+                else:
+                    errors[n] = f"{via}：{res[n]}"
+                    if r is not None and r != routes[-1]:
+                        print(c("2", f"  {pad(n, 8)} {via}失败（{res[n]}），换路线重试 …"))
+    finally:
+        if route is not None:
+            api.select(ROUTE, orig)
+    for n in pending:
+        print(f"  {pad(n, 8)} {c('31', '失败')} {errors[n]}")
+    return not pending
+
+
+def cmd_fix(api):
+    print(c("1", "更新订阅"))
+    cmd_update(api)
+    print()
+    print(c("1", "调整出口"))
+    cmd_tune(api)
+    print()
+    cmd_status(api, retest=False)
 
 
 # ---------------------------------------------------------------- setup
@@ -680,9 +851,11 @@ def main():
     if args[0] == "pick":
         return cmd_pick(api, args[1] if len(args) > 1 else None)
     if args[0] == "tune":
-        return cmd_tune(api, *args[1:2])
+        return cmd_tune(api, args[1:])
     if args[0] == "update":
-        return cmd_update(api)
+        return cmd_update(api) or sys.exit(1)
+    if args[0] == "fix":
+        return cmd_fix(api)
     die(f"未知命令 {args[0]}，见 netsel -h")
 
 

@@ -14,7 +14,10 @@
 //   国内   GEOSITE cn / GEOIP CN，默认直连
 //   国外   其余流量；默认「自动容灾」：按订阅顺序取第一个可用订阅里延迟最低的节点
 //   AI    Claude / OpenAI 等不对香港开放的服务，按地区分三档逐级回落：美国 → 非亚洲 → 其余允许地区；
-//         HK/MO/CN/RU 永远不进（绝不退到不限地区的自动容灾，否则会从香港出去被 OpenAI 拦截）
+//         HK/MO/CN/RU 永远不进（绝不退到不限地区的自动容灾，否则会从香港出去被 OpenAI 拦截）。
+//         健康检查直接测 Anthropic API（见 AI_TEST），不测 gstatic
+// 另有一个隐藏的「订阅更新」组：mihomo 拉订阅走它，默认直连；`netsel update` 直连失败时把它依次
+// 切到各订阅的节点重试，完成后切回直连。
 // 组名是 netsel 的 API，改名要同步改 netsel.py。
 
 const SUBS = __SUBS__;
@@ -24,6 +27,14 @@ const ALICLOUD = __ALICLOUD__;
 
 const TURBOAI_DOMAINS = ["philoai.xyz", "vegalb.com"];
 const TEST_URL = "https://www.gstatic.com/generate_204";
+// AI 线的健康检查：不带 key 访问 Anthropic API，连得上时返回 401。只测 gstatic 会把「能上网但到不了
+// Anthropic」的节点当成可用而一直选着它（实际碰到过）。它分辨不了地区——香港节点同样返回 401，
+// 地区仍然只靠下面的节点名过滤。
+// 与 netsel.py 的 AI_TEST / AI_EXPECT 一致：mihomo 按 URL 字符串区分测速记录。
+const AI_TEST = "https://api.anthropic.com/v1/models";
+const AI_EXPECT = "401";
+// 拉订阅走的组，见文件头
+const ROUTE = "订阅更新";
 // 订阅里用来展示流量 / 到期的假节点
 const INFO_NODES = "剩余流量|距离下次重置|套餐到期|过期时间|官网";
 // 地区只按代码 / 中文名匹配，不按旗帜：有的订阅 TW 节点挂的是 🇨🇳
@@ -44,6 +55,8 @@ function main(config, profileName) {
       url: s.url,
       path: `./proxy-providers/${s.key}.yaml`,
       interval: 86400,
+      // 不指定时拉订阅走规则：订阅地址是 IP 时落到 MATCH,国外，国外一坏订阅也更新不了
+      proxy: ROUTE,
       // 有的机场按 UA 决定下发格式与是否带 subscription-userinfo
       header: { "User-Agent": ["clash-verge/v2.5.8"] },
       "exclude-filter": INFO_NODES,
@@ -53,6 +66,7 @@ function main(config, profileName) {
   const names = SUBS.map((s) => s.name);
   const auto = (n) => `${n} 自动`;
   const urlTest = { url: TEST_URL, interval: 300, tolerance: 50, lazy: true };
+  const aiTest = { ...urlTest, url: AI_TEST, "expected-status": AI_EXPECT };
 
   const groups = [
     { name: "TurboAI", type: "select", proxies: ["DIRECT", "国外"] },
@@ -67,35 +81,39 @@ function main(config, profileName) {
     //   AI 非亚洲  排除不支持地区与亚洲：欧洲节点，以及 JMS（出口多在 US/NL）
     //   AI 兜底    只排除不支持地区，亚洲节点在这里才出现
     // 不能退到自动容灾——它可能首选 HK 节点，OpenAI 会直接 403。
-    { name: "AI 自动", type: "fallback", proxies: ["AI 美国", "AI 非亚洲", "AI 兜底"], ...urlTest },
-    { name: "AI 美国", type: "url-test", use: SUBS.map((s) => s.key), filter: AI_US, ...urlTest },
+    { name: "AI 自动", type: "fallback", proxies: ["AI 美国", "AI 非亚洲", "AI 兜底"], ...aiTest },
+    { name: "AI 美国", type: "url-test", use: SUBS.map((s) => s.key), filter: AI_US, ...aiTest },
     {
       name: "AI 非亚洲",
       type: "url-test",
       use: SUBS.map((s) => s.key),
       "exclude-filter": `(?i)${AI_BLOCKED}|${ASIA}`,
-      ...urlTest,
+      ...aiTest,
     },
     {
       name: "AI 兜底",
       type: "url-test",
       use: SUBS.map((s) => s.key),
       "exclude-filter": `(?i)${AI_BLOCKED}`,
-      ...urlTest,
+      ...aiTest,
     },
     ...SUBS.flatMap(({ name: n, key }) => [
       { name: n, type: "select", proxies: [auto(n)], use: [key] },
       { name: auto(n), type: "url-test", use: [key], ...urlTest },
     ]),
+    // 先直连，再按订阅顺序借各订阅的节点（netsel update 负责切换）
+    { name: ROUTE, type: "select", proxies: ["DIRECT", ...names.map(auto)], hidden: true },
   ];
 
+  // 地址是 IP 时 DOMAIN 规则匹配不到，要写成 IP-CIDR
+  const hostRule = (h, target) =>
+    /^[0-9.]+$/.test(h) ? `IP-CIDR,${h}/32,${target},no-resolve` : `DOMAIN,${h},${target}`;
   const subHosts = SUBS.map((s) => s.url.replace(/^[a-z]+:\/\//i, "").split(/[/?#:]/)[0]);
   const rules = [
     ...TURBOAI_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},TurboAI`),
-    ...ALICLOUD.map((h) =>
-      /^[0-9.]+$/.test(h) ? `IP-CIDR,${h}/32,AliCloud,no-resolve` : `DOMAIN,${h},AliCloud`,
-    ),
-    ...subHosts.map((h) => `DOMAIN,${h},DIRECT`),
+    ...ALICLOUD.map((h) => hostRule(h, "AliCloud")),
+    // 经 Clash 访问订阅地址时（如 Verge 自己更新订阅）走这条；mihomo 拉 provider 走 ROUTE 组，不看规则
+    ...subHosts.map((h) => hostRule(h, "DIRECT")),
     "GEOSITE,private,DIRECT",
     "GEOIP,private,DIRECT,no-resolve",
     "IP-CIDR,100.64.0.0/10,DIRECT,no-resolve", // tailscale
