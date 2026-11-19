@@ -13,8 +13,10 @@
 //             由 `netsel tune` 按 ssh 登录实测挑出口；mihomo 的测速只会发 HTTP，测不了 ssh
 //   国内   GEOSITE cn / GEOIP CN，默认直连
 //   国外   其余流量；默认「自动容灾」：按订阅顺序取第一个可用订阅里延迟最低的节点
-//   AI    Claude / OpenAI 等不对香港开放的服务，按地区分三档逐级回落：美国 → 非亚洲 → 其余允许地区；
+//   AI    Claude / OpenAI 等不对香港开放的服务，四档逐级回落：美国 → 备用 → 非亚洲 → 其余允许地区；
 //         HK/MO/CN/RU 永远不进（绝不退到不限地区的自动容灾，否则会从香港出去被 OpenAI 拦截）。
+//         「备用」是清单里标了 ai: true 的订阅（JMS）：所有节点的 AI 出口都实测过在支持地区，
+//         排在按节点名猜地区的两档前面；它不参与另外三档。
 //         健康检查直接测 Anthropic API（见 AI_TEST），不测 gstatic
 // 另有一个隐藏的「订阅更新」组：mihomo 拉订阅走它，默认直连；`netsel update` 直连失败时把它依次
 // 切到各订阅的节点重试，完成后切回直连。
@@ -69,38 +71,60 @@ function main(config, profileName) {
   }
   const names = SUBS.map((s) => s.name);
   const auto = (n) => `${n} 自动`;
+  // AI 按地区分档只看节点名；标了 ai 的订阅出口已实测，单独成「AI 备用」一档
+  const regionKeys = SUBS.filter((s) => !s.ai).map((s) => s.key);
+  const reserveKeys = SUBS.filter((s) => s.ai).map((s) => s.key);
   const urlTest = { url: TEST_URL, interval: 300, tolerance: 50, lazy: true };
   const aiTest = { ...urlTest, url: AI_TEST, "expected-status": AI_EXPECT };
+
+  const tierGroups = [];
+  if (regionKeys.length) {
+    tierGroups.push({ name: "AI 美国", type: "url-test", use: regionKeys, filter: AI_US, ...aiTest });
+  }
+  if (reserveKeys.length) {
+    tierGroups.push({
+      name: "AI 备用",
+      type: "url-test",
+      use: reserveKeys,
+      "exclude-filter": `(?i)${AI_BLOCKED}`,
+      ...aiTest,
+    });
+  }
+  if (regionKeys.length) {
+    tierGroups.push(
+      {
+        name: "AI 非亚洲",
+        type: "url-test",
+        use: regionKeys,
+        "exclude-filter": `(?i)${AI_BLOCKED}|${ASIA}`,
+        ...aiTest,
+      },
+      { name: "AI 兜底", type: "url-test", use: regionKeys, "exclude-filter": `(?i)${AI_BLOCKED}`, ...aiTest },
+    );
+  }
+  const aiTiers = tierGroups.map((g) => g.name);
 
   const groups = [
     { name: "TurboAI", type: "select", proxies: ["DIRECT", "国外"] },
     // 国外在前：没调过时与以前一样（以前它落在 MATCH,国外）。AI 美国是离机器最近的一档节点
-    { name: "AliCloud", type: "select", proxies: ["国外", "DIRECT", "AI 美国", ...names] },
+    {
+      name: "AliCloud",
+      type: "select",
+      proxies: ["国外", "DIRECT", ...(regionKeys.length ? ["AI 美国"] : []), ...names],
+    },
     { name: "国内", type: "select", proxies: ["DIRECT", "国外"] },
     { name: "国外", type: "select", proxies: ["自动容灾", ...names] },
-    { name: "AI", type: "select", proxies: ["AI 自动", "国外", ...names] },
+    // AI 备用单列出来，供 `netsel tune` 在 AI 自动不可用时钉住
+    { name: "AI", type: "select", proxies: ["AI 自动", ...(reserveKeys.length ? ["AI 备用"] : []), "国外", ...names] },
     { name: "自动容灾", type: "fallback", proxies: names.map(auto), ...urlTest },
-    // 三档按顺序回落，每档内部测速选优：
-    //   AI 美国    名字带 US 的节点（JMS 节点名不带地区，进不了这一档）
-    //   AI 非亚洲  排除不支持地区与亚洲：欧洲节点，以及 JMS（出口多在 US/NL）
+    // 按顺序回落，每档内部测速选优：
+    //   AI 美国    名字带 US 的节点
+    //   AI 备用    标了 ai: true 的订阅（JMS 节点名不带地区，但出口实测在 US/NL/JP）
+    //   AI 非亚洲  排除不支持地区与亚洲：欧洲、澳洲等节点
     //   AI 兜底    只排除不支持地区，亚洲节点在这里才出现
     // 不能退到自动容灾——它可能首选 HK 节点，OpenAI 会直接 403。
-    { name: "AI 自动", type: "fallback", proxies: ["AI 美国", "AI 非亚洲", "AI 兜底"], ...aiTest },
-    { name: "AI 美国", type: "url-test", use: SUBS.map((s) => s.key), filter: AI_US, ...aiTest },
-    {
-      name: "AI 非亚洲",
-      type: "url-test",
-      use: SUBS.map((s) => s.key),
-      "exclude-filter": `(?i)${AI_BLOCKED}|${ASIA}`,
-      ...aiTest,
-    },
-    {
-      name: "AI 兜底",
-      type: "url-test",
-      use: SUBS.map((s) => s.key),
-      "exclude-filter": `(?i)${AI_BLOCKED}`,
-      ...aiTest,
-    },
+    { name: "AI 自动", type: "fallback", proxies: aiTiers, ...aiTest },
+    ...tierGroups,
     ...SUBS.flatMap(({ name: n, key }) => [
       { name: n, type: "select", proxies: [auto(n)], use: [key] },
       { name: auto(n), type: "url-test", use: [key], ...urlTest },

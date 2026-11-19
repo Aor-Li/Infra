@@ -6,8 +6,8 @@
     netsel pick [组]       用 fzf 选择某个分组的出口；不带组名先选组
     netsel tune [线]       按需给分流线调出口（不带线名则全部），只在当前出口不通或明显更差时才换：
                              国内 / 国外 / AI  逐个候选实测该线的目标站；默认的自动组可用就用它，
-                                               不可用时钉到实测最好的候选（AI 只会回到 AI 自动，
-                                               其余候选可能从香港出去，不自动选）
+                                               不可用时钉到实测最好的候选（AI 只会在 AI 自动与
+                                               AI 备用之间选，其余候选可能从香港出去，不自动选）
                              TurboAI / AliCloud  逐个候选实测 ssh 登录耗时（mihomo 只会测 HTTP）
     netsel update          重新拉取所有订阅；直连拉不下来的，依次借各订阅的节点重试
     netsel setup           把 Clash Verge 收敛到仓库的配置：导入清单里缺的订阅、分流脚本、
@@ -22,6 +22,7 @@ switch 不会改动代理：网络只在你执行 `netsel setup` 时才会变。
 """
 
 import concurrent.futures as cf
+import datetime
 import json
 import os
 import re
@@ -29,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -45,7 +47,11 @@ TEST_URL = "https://www.gstatic.com/generate_204"
 # 不带 key 访问 Anthropic API，连得上时返回 401。分辨不了地区（香港节点也返回 401）
 AI_TEST = "https://api.anthropic.com/v1/models"
 AI_EXPECT = "401"
-AI_TIERS = ["AI 美国", "AI 非亚洲", "AI 兜底"]
+AI_TIMEOUT = 5000  # 毫秒，见 retest_groups
+# AI 线的真实出口地区：claude.ai 落在 AI 线（GEOSITE category-ai-!cn），Cloudflare 的 trace 回显出口 loc。
+# 节点名不可靠——机场会把 AI 流量另行转发（实测 Forest 的香港节点访问 claude.ai 从美国出去）
+AI_TRACE = "https://claude.ai/cdn-cgi/trace"
+AI_BLOCKED_LOC = {"HK", "MO", "CN", "RU"}  # 与 clash-script.js 的 AI_BLOCKED 一致
 ROUTE = "订阅更新"  # mihomo 拉订阅走的组，见 clash-script.js
 LINES = ["TurboAI", "AliCloud", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
 # 按 HTTP 实测连通性的分流线 → (目标 URL, 期望状态码)
@@ -54,9 +60,9 @@ HTTP_LINES = {
     "国外": (TEST_URL, None),
     "AI": (AI_TEST, AI_EXPECT),
 }
-# tune 只会自动切到这些候选（不在表里的线不限）。AI 的其余候选（国外、各订阅）可能从香港出去，
-# 测速又分辨不了地区，只能由你用 `netsel pick AI` 手动选
-TUNE_ONLY = {"AI": ["AI 自动"]}
+# tune 只会自动切到这些候选（不在表里的线不限）。AI 备用是清单里标了 ai: true 的订阅，出口实测过；
+# AI 的其余候选（国外、各订阅）可能从香港出去，测速又分辨不了地区，只能由你用 `netsel pick AI` 手动选
+TUNE_ONLY = {"AI": ["AI 自动", "AI 备用"]}
 # 按 ssh 登录实测连通性的分流线 → 测哪个 ssh 别名（来自对应 home entity 的 provides.ssh，经 SOPS 解密）
 SSH_LINES = {"TurboAI": "TurboAI-gw", "AliCloud": "AliCloud"}
 SSH = "/usr/bin/ssh"  # activation 的 PATH 里没有 ssh
@@ -65,14 +71,115 @@ TTY = sys.stdout.isatty()
 
 
 def c(code, s):
-    return f"\033[{code}m{s}\033[0m" if TTY else s
+    return f"\033[{code}m{s}\033[0m" if TTY and code else s
 
 
-def fmt_delay(d):
+def delay_seg(d, good=200, slow=500, fail="超时"):
+    """毫秒 → (文本, 颜色)：1 秒以上写成 1.9s。"""
     if not d:
-        return c("31", "超时")
-    color = "32" if d < 200 else "33" if d < 500 else "31"
-    return c(color, f"{d}ms")
+        return fail, "31"
+    return (f"{d}ms" if d < 1000 else f"{d / 1000:.1f}s"), "32" if d < good else "33" if d < slow else "31"
+
+
+def fmt_delay(d, good=200, slow=500, fail="超时"):
+    text, code = delay_seg(d, good, slow, fail)
+    return c(code, text)
+
+
+# ---------------------------------------------------------------- 排版
+#
+# 终端里按显示宽度对齐：CJK 占两格，ANSI 转义不占格。可截断的单元格写成 [(文本, 颜色)] 段落，
+# 先按纯文本截断再上色，免得把转义序列截成两半。
+
+ANSI = re.compile(r"\033\[[0-9;]*m")
+OK, BAD, NA = c("32", "✓"), c("31", "✗"), c("2", "·")
+
+
+def width(s):
+    w = 0
+    for ch in ANSI.sub("", s):
+        if unicodedata.combining(ch) or ch in "‍️":
+            continue
+        w += 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+    return w
+
+
+def pad(s, w, right=False):
+    gap = " " * max(0, w - width(s))
+    return gap + s if right else s + gap
+
+
+def seg_width(segs):
+    return sum(width(t) for t, _ in segs)
+
+
+def clip(segs, maxw):
+    """拼接 [(文本, 颜色)]，超过 maxw 时截断并以 … 结尾。"""
+    if seg_width(segs) <= maxw:
+        return "".join(c(code, t) for t, code in segs)
+    out, room = [], maxw - 1
+    for t, code in segs:
+        keep = ""
+        for ch in t:
+            if width(keep + ch) > room:
+                break
+            keep += ch
+        room -= width(keep)
+        out.append(c(code, keep))
+        if keep != t:
+            break
+    return "".join(out) + "…"
+
+
+def term_width():
+    return shutil.get_terminal_size((100, 24)).columns
+
+
+def table(rows, right=(), flex=None, maxw=None):
+    """对齐成若干行文本。单元格是字符串或段落；right 里的列右对齐；总宽超过 maxw 时截断 flex 列。"""
+    def cw(cell):
+        return seg_width(cell) if isinstance(cell, list) else width(cell)
+
+    ncol = max(len(r) for r in rows)
+    widths = [max((cw(r[i]) for r in rows if i < len(r)), default=0) for i in range(ncol)]
+    if flex is not None and maxw:
+        over = sum(widths) + 2 * (ncol - 1) - maxw
+        if over > 0:
+            widths[flex] = max(8, widths[flex] - over)
+    out = []
+    for r in rows:
+        cells = [
+            pad(clip(cell, widths[i]) if isinstance(cell, list) else cell, widths[i], i in right)
+            for i, cell in enumerate(r)
+        ]
+        out.append("  ".join(cells).rstrip())
+    return out
+
+
+def box(title, lines, inner=0):
+    """圆角框：╭─ 标题 ─╮ … ╰─╯。lines 的宽度由调用方控制在 term_width() - 4 以内；
+    inner 给定时至少撑到这么宽，用来让上下几个框对齐。"""
+    inner = max([width(ln) for ln in lines] + [width(title) + 1, inner])
+    print(c("2", "╭─ ") + c("1", title) + c("2", " " + "─" * (inner - width(title) - 1) + "╮"))
+    for ln in lines:
+        print(c("2", "│ ") + pad(ln, inner) + c("2", " │"))
+    print(c("2", "╰" + "─" * (inner + 2) + "╯"))
+
+
+def hops(names):
+    """出口链的展示段落：中间的分组变暗，末端的节点正常显示。"""
+    names = [{"DIRECT": "直连", "REJECT": "拒绝"}.get(n, short(n)) for n in names]
+    segs = []
+    for i, n in enumerate(names):
+        last = i == len(names) - 1
+        segs.append((n, None if last else "2"))
+        if not last:
+            segs.append((" › ", "2"))
+    return segs
+
+
+def warn(msg):
+    print(c("33", f" ! {msg}"))
 
 
 def die(msg):
@@ -164,6 +271,22 @@ class Api:
     def select(self, group, name):
         self.call("PUT", f"/proxies/{urllib.parse.quote(group)}", {"name": name})
 
+    def ai_exit(self):
+        """AI 线当前的出口地区（如 US），测不出来时为 None。显式经 Clash 的代理端口访问，
+        不依赖本机开没开 TUN / 系统代理；请求按规则落在 AI 线。"""
+        try:
+            conf = self.call("GET", "/configs") or {}
+            port = conf.get("mixed-port") or conf.get("port")
+            if not port:
+                return None
+            proxy = f"http://127.0.0.1:{port}"
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+            with opener.open(AI_TRACE, timeout=8) as r:
+                text = r.read().decode()
+        except (OSError, ValueError):
+            return None
+        return dict(ln.split("=", 1) for ln in text.splitlines() if "=" in ln).get("loc")
+
 
 def last_delay(p):
     h = p.get("history") or []
@@ -175,9 +298,9 @@ def short(name):
     return re.sub(r"^JMS-\d+@([^.]+)\.[^:]+", r"\1", name)
 
 
-def progress(on):
+def progress(on, what="测速"):
     if TTY:
-        print(c("2", "测速中…") + "\r" if on else "\r\033[K", end="", flush=True)
+        print(c("2", f" {what}中…") + "\r" if on else "\r\033[K", end="", flush=True)
 
 
 def chain(proxies, name):
@@ -205,8 +328,9 @@ def provider_key(group):
 def load_subs(wait_s=0):
     """订阅清单：entity/users/aor/secrets.yaml 的 clash.subscriptions，经 sops 解密到本机。
 
-    内容是 YAML 列表 [{name, url, summary?}]，顺序即「自动容灾」的优先级；恰好一项
+    内容是 YAML 列表 [{name, url, summary?, ai?}]，顺序即「自动容灾」的优先级；恰好一项
     summary: true，它是全局脚本改写的汇总订阅，其余订阅激活时保留原生节点供救急。
+    ai: true 的订阅单独成「AI 备用」一档（见 clash-script.js）。
     清单在所有机器上一致，所以分流结构不再取决于本机 Verge 里恰好导入了哪些订阅。"""
     if wait_s:  # 第一次 switch 时 sops-nix 的 launchd agent 与 activation 并行，等它解密
         wait(lambda: os.path.exists(SUBSCRIPTIONS), wait_s)
@@ -222,6 +346,7 @@ def load_subs(wait_s=0):
             "key": provider_key(s["name"]),
             "url": s["url"],
             "summary": bool(s.get("summary")),
+            "ai": bool(s.get("ai")),
         })
     if sum(s["summary"] for s in out) != 1:
         die("订阅清单里要恰好一项 summary: true（汇总订阅）。")
@@ -233,89 +358,123 @@ def load_subs(wait_s=0):
 
 def cmd_status(api, retest=True):
     hint = drift_hint()
-    if hint:
-        print(c("33", hint))
-        print()
     proxies = api.proxies()
     if not all(line in proxies for line in LINES):
         if hint:  # 脚本还是旧的（分流线改过名），提示里已经让执行 setup
+            warn(hint)
             die("当前分流结构与仓库不一致，执行 `netsel setup`。")
         summary = next((s["name"] for s in load_subs() if s["summary"]), "汇总订阅") if os.path.exists(SUBSCRIPTIONS) else "汇总订阅"
         die(f"当前激活的不是汇总订阅，没有 netsel 分流：在 Clash Verge 里选中 {summary}"
             "（deep link 导入新订阅后 Verge 可能自动切到了它），或执行 `netsel setup`。")
     names = subs(proxies)
+    if hint:
+        warn(hint)
 
     if retest:
-        retest_groups(api, names)
+        retest_groups(api, proxies)
         proxies = api.proxies()
 
-    # 连通性：分流线逐条实测（经 mihomo 的出口），SSH_LINES 另测真实 ssh 登录
+    # 连通性：分流线逐条实测（经 mihomo 的出口），SSH_LINES 另测真实 ssh 登录，AI 另查真实出口地区
+    progress(True, "实测各分流线")
     with cf.ThreadPoolExecutor() as ex:
         futs = {k: ex.submit(api.delay, k, u, e) for k, (u, e) in HTTP_LINES.items()}
         ssh_futs = {k: ex.submit(probe_ssh, h) for k, h in SSH_LINES.items()}
+        loc_fut = ex.submit(api.ai_exit)
         reach = {k: f.result() for k, f in futs.items()}
         ssh_res = {k: f.result() for k, f in ssh_futs.items()}
-    broken = [k for k, d in reach.items() if not d] + [k for k, (ok, _) in ssh_res.items() if ok is False]
+        loc = loc_fut.result()
+    progress(False)
 
-    print(c("1", f"  {pad('分流', 9)} {pad('出口', 50)}  连通性"))
+    maxw = term_width() - 4
+    rows, broken = [], []
     for line in LINES:
-        ch = chain(proxies, line)
-        leaf = proxies.get(ch[-1]) or {}
-        path = " → ".join(short(x) for x in ch[1:])
-        if leaf.get("type") not in ("Direct", "Reject") and ch[-1] not in ("DIRECT",):
-            path += f" ({fmt_delay(last_delay(leaf))})"
         if line in SSH_LINES:
-            r = ssh_res[line][1]
+            ok, via, ms = ssh_res[line]
+            target = f"ssh {SSH_LINES[line]}"
+            val = c("2", "未配置") if ok is None else fmt_delay(ms, 3000, 6000, "失败")
+            extra = c("2", via)
         else:
-            r = f"{HTTP_LINES[line][0].split('/')[2]:<18} {fmt_delay(reach[line])}"
-        print(f"  {pad(line, 9)} {pad(path, 50)}  {r}")
-    if broken:
-        print(c("33", f"  {'、'.join(broken)} 不通：执行 `netsel fix`（更新订阅并重新调出口）"))
+            ms = reach[line]
+            ok = bool(ms)
+            target = re.sub(r"^(www|api)\.", "", HTTP_LINES[line][0].split("/")[2])
+            val, extra = fmt_delay(ms), ""
+        if line == "AI":
+            extra = c("31" if loc in AI_BLOCKED_LOC else "2", f"出口 {loc or '?'}")
+            ok = ok and loc not in AI_BLOCKED_LOC
+        if ok is False:
+            broken.append(line)
+        mark = NA if ok is None else OK if ok else BAD
+        rows.append([f"{mark} {c('1', line)}", hops(chain(proxies, line)[1:]), c("2", target), val, extra])
+    line_box = table(rows, right={3}, flex=1, maxw=maxw)
 
-    print()
-    print(c("1", "订阅"))
     provs = api.providers()
+    rows, tops = [], []
     for n in names:
         p = provs.get(provider_key(n)) or {}
         nodes = p.get("proxies") or []
-        delays = [(last_delay(x), x["name"]) for x in nodes]
-        alive = sorted((d, nm) for d, nm in delays if d)
-        info = p.get("subscriptionInfo") or {}
-        used = (info.get("Upload", 0) + info.get("Download", 0)) / 2**30
-        total = info.get("Total", 0) / 2**30
-        exp = info.get("Expire")
-        quota = f"流量 {used:.0f}/{total:.0f} GB" if total else "流量 未知"
-        if exp:
-            quota += f"  到期 {time.strftime('%Y-%m-%d', time.localtime(exp))}"
-        upd = (p.get("updatedAt") or "")[:10]
-        print(
-            f"  {pad(n, 8)} 可用 {len(alive):>2}/{len(nodes):<3} {quota}  更新于 {upd or '?'}"
-        )
+        alive = sorted((d, x["name"]) for x in nodes if (d := last_delay(x)))
+        rows.append([
+            c("1", n),
+            c("32" if alive else "31", f"{len(alive)}/{len(nodes)}") + c("2", " 可用"),
+            *sub_info(p),
+        ])
+        top = []
         for d, nm in alive[:3]:
-            print(f"           {pad(fmt_delay(d), 7)} {short(nm)}")
-        if not alive:
-            print(c("31", "           无可用节点"))
+            if top:
+                top.append(("  ·  ", "2"))
+            top += [(short(nm) + " ", "2"), delay_seg(d)]
+        tops.append(top or [("无可用节点", "31")])
+    sub_box = []
+    for row, top in zip(table(rows, maxw=maxw), tops):
+        sub_box += [row, "  " + clip(top, maxw - 2)]
+
+    inner = max(width(ln) for ln in line_box + sub_box)
+    box("分流线", line_box, inner)
+    if loc in AI_BLOCKED_LOC:
+        warn(f"AI 线从 {loc} 出口，Claude / OpenAI 会拒绝 → `netsel tune AI`")
+    if broken:
+        warn(f"{'、'.join(broken)} 不通 → `netsel fix`（更新订阅并重新调出口）")
+    box("订阅", sub_box, inner)
 
 
-def retest_groups(api, names):
+def sub_info(p):
+    """订阅的 [流量, 到期, 更新时间] 三个单元格，快用完 / 快到期 / 久未更新时变色。"""
+    info = p.get("subscriptionInfo") or {}
+    total, used = info.get("Total", 0), info.get("Upload", 0) + info.get("Download", 0)
+    if total:
+        r = used / total
+        quota = c("31" if r > 0.95 else "33" if r > 0.8 else None, f"{used / 2**30:.0f}/{total / 2**30:.0f} GB")
+    else:
+        quota = c("2", "流量未知")
+    exp = info.get("Expire")
+    if exp:
+        days = (exp - time.time()) / 86400
+        expire = c("31" if days < 3 else "33" if days < 7 else None,
+                   "到期 " + time.strftime("%Y-%m-%d", time.localtime(exp)))
+    else:
+        expire = c("2", "不限期")
+    try:
+        age = (datetime.date.today() - datetime.date.fromisoformat((p.get("updatedAt") or "")[:10])).days
+        updated = c("2" if age < 2 else "33", {0: "今天更新", 1: "昨天更新"}.get(age, f"{age} 天前更新"))
+    except ValueError:
+        updated = c("2", "未更新")
+    return [quota, expire, updated]
+
+
+def retest_groups(api, proxies):
     """测自动组而不是 select 组：mihomo 测完会按新结果重选，出口跟着刷新。
-    顺序有讲究：先并行测各订阅的节点（互不重叠），再测 AI 的三档（前者的子集，错开以免挤占），
-    最后测两个 fallback——它们的成员是上面的组，要等成员选好了，测出来的存活才是真的。"""
-    progress(True)
+    顺序有讲究：先并行测各订阅的节点（互不重叠），再测 AI 的各档（前者的子集，错开以免挤占），
+    最后测两个 fallback——它们的成员是上面的组，要等成员选好了，测出来的存活才是真的。
+    AI 的测速给 5 秒：经中转握手到 Anthropic 常要 2 秒多，3 秒会把能用的节点误判成挂了。"""
+    progress(True, "测速")
+    tiers = (proxies.get("AI 自动") or {}).get("all") or []
     with cf.ThreadPoolExecutor() as ex:
-        list(ex.map(api.group_delay, [f"{n} 自动" for n in names]))
-    for g in AI_TIERS:
-        api.group_delay(g, AI_TEST, AI_EXPECT)
+        list(ex.map(api.group_delay, [f"{n} 自动" for n in subs(proxies)]))
+    for g in tiers:
+        api.group_delay(g, AI_TEST, AI_EXPECT, AI_TIMEOUT)
     api.group_delay("自动容灾")
-    api.group_delay("AI 自动", AI_TEST, AI_EXPECT)
+    api.group_delay("AI 自动", AI_TEST, AI_EXPECT, AI_TIMEOUT)
     progress(False)
-
-
-def pad(s, width):
-    """按终端显示宽度补空格（CJK / emoji 占两格，ANSI 转义不占格）。"""
-    plain = re.sub(r"\033\[[0-9;]*m", "", s)
-    w = sum(2 if ord(ch) > 0x2E80 else 1 for ch in plain)
-    return s + " " * max(0, width - w)
 
 
 def ssh_config(host):
@@ -347,13 +506,13 @@ def ssh_login(host):
 
 
 def probe_ssh(host):
-    """(是否登录成功——未配置时为 None, 展示文本)"""
+    """(是否登录成功——未配置时为 None, 走哪条路, 登录毫秒)"""
     cfg = ssh_config(host)
     if cfg is None:
-        return None, c("2", f"ssh {host} 未配置")
+        return None, "", None
     via = "ssh-direct" if "ssh-direct" in cfg.get("proxycommand", "") else "经 Clash"
     ms = ssh_login(host)
-    return bool(ms), f"ssh {host} [{via}] " + (c("32" if ms < 3000 else "33", f"{ms}ms 登录") if ms else c("31", "失败"))
+    return bool(ms), via, ms
 
 
 def alicloud_hosts():
@@ -366,7 +525,7 @@ def fzf(lines, prompt):
     if not shutil.which("fzf"):
         die("需要 fzf")
     r = subprocess.run(
-        ["fzf", "--prompt", prompt, "--height", "~60%", "--reverse",
+        ["fzf", "--ansi", "--prompt", prompt, "--height", "~60%", "--reverse",
          "--delimiter", "\t", "--with-nth", "2..", "--no-sort"],
         input="\n".join(lines), capture_output=True, text=True,
     )
@@ -379,11 +538,9 @@ def cmd_pick(api, group=None):
     proxies = api.proxies()
     selectable = [n for n in LINES + subs(proxies) if proxies.get(n, {}).get("type") == "Selector"]
     if group is None:
-        lines = []
-        for g in selectable:
-            ch = chain(proxies, g)
-            lines.append(f"{g}\t{pad(g, 8)} → {' → '.join(short(x) for x in ch[1:])}")
-        group = fzf(lines, "分组> ")
+        rows = [[c("1", g), hops(chain(proxies, g)[1:])] for g in selectable]
+        lines = [f"{g}\t{row}" for g, row in zip(selectable, table(rows, flex=1, maxw=term_width() - 6))]
+        group = fzf(lines, "分组 › ")
     if group not in proxies:
         die(f"没有分组 {group}；可选：{', '.join(selectable)}")
 
@@ -392,18 +549,17 @@ def cmd_pick(api, group=None):
     progress(False)
     proxies = api.proxies()
     g = proxies[group]
-    lines = []
+    rows = []
     for name in g["all"]:
         p = proxies.get(name, {})
-        d = last_delay(p)
         is_group = p.get("type") in ("Selector", "URLTest", "Fallback")
-        sub = f"→ {' → '.join(short(x) for x in chain(proxies, name)[1:])}" if is_group and p.get("now") else ""
-        mark = "●" if name == g["now"] else " "
-        dl = "" if name == "DIRECT" else fmt_delay(d)
-        lines.append(f"{name}\t{mark} {pad(dl, 6)}  {short(name)}  {c('2', sub)}")
-    choice = fzf(lines, f"{group}> ")
+        mark = c("32", "●") if name == g["now"] else c("2", "○")
+        dl = "" if name == "DIRECT" else fmt_delay(last_delay(p))
+        rows.append([mark, dl, short(name), hops(chain(proxies, name)[1:]) if is_group else ""])
+    lines = [f"{name}\t{row}" for name, row in zip(g["all"], table(rows, right={1}, flex=3, maxw=term_width() - 6))]
+    choice = fzf(lines, f"{group} › ")
     api.select(group, choice)
-    print(f"{group} → {choice}")
+    print(f" {OK} {c('1', group)} → {choice}")
 
 
 # ---------------------------------------------------------------- tune / update / fix
@@ -420,7 +576,7 @@ def fmt_score(s, rounds, slow):
     fails, med = s
     if fails >= rounds:
         return c("31", "全部失败")
-    return c("32" if med < slow else "33", f"{med}ms") + (c("31", f"  失败 {fails}") if fails else "")
+    return fmt_delay(med, slow, slow * 2) + (c("31", f" 失败 {fails}") if fails else "")
 
 
 def clearly_better(a, b, min_gain):
@@ -431,12 +587,22 @@ def clearly_better(a, b, min_gain):
     return b[1] - a[1] >= max(min_gain, 0.2 * b[1])
 
 
+def tune_box(api, line, what, cands, orig, cells):
+    """一条分流线的实测结果：每个候选一行（● 是当前出口），cells[cand] 是它的成绩单元格。"""
+    proxies = api.proxies()
+    rows = [
+        [f"{c('32', '●') if cand == orig else c('2', '○')} {cand}", cells[cand], hops(chain(proxies, cand)[1:])]
+        for cand in cands
+    ]
+    box(f"{line} · {what}", table(rows, flex=2, maxw=term_width() - 4))
+
+
 def report(line, target, orig):
     """打印调整结果，返回出口是否变了。"""
     if target == orig:
-        print(f"  {c('1', line)} 保持 {orig}")
+        print(c("2", f"   ✓ 保持 {orig}"))
     else:
-        print(f"  {c('1', line)} → {target}（原来是 {orig}）")
+        print(f"   {c('33', '→')} {c('1', line)} 改为 {c('1', target)}" + c("2", f"（原来是 {orig}）"))
     return target != orig
 
 
@@ -447,17 +613,18 @@ def tune_http(api, line, rounds=3):
     url, expected = HTTP_LINES[line]
     g = api.proxies()[line]
     cands, orig = g["all"], g["now"]
+    timeout = AI_TIMEOUT if line == "AI" else 5000
 
     def measure(cand):
-        return score([api.delay(cand, url, expected) for _ in range(rounds)], rounds)
+        return score([api.delay(cand, url, expected, timeout) for _ in range(rounds)], rounds)
 
+    progress(True, f"实测 {line}")
     with cf.ThreadPoolExecutor() as ex:
         scores = dict(zip(cands, ex.map(measure, cands)))
-    proxies = api.proxies()
-    for cand in cands:
-        mark = "●" if cand == orig else " "
-        leaf = " → ".join(short(x) for x in chain(proxies, cand)[1:])
-        print(f"    {mark} {pad(cand, 12)} {pad(fmt_score(scores[cand], rounds, 500), 16)} {c('2', leaf)}")
+    progress(False)
+    host = re.sub(r"^(www|api)\.", "", url.split("/")[2])
+    tune_box(api, line, f"{host} ×{rounds}", cands, orig,
+             {k: fmt_score(v, rounds, 500) for k, v in scores.items()})
     default = cands[0]
     allowed = [x for x in cands if x == orig or x in TUNE_ONLY.get(line, cands)]
     best = min(allowed, key=scores.get)
@@ -467,14 +634,14 @@ def tune_http(api, line, rounds=3):
         target = best
     else:
         hint = "；可以用 `netsel pick` 手动选" if line in TUNE_ONLY else ""
-        print(c("31", f"  {line} 能自动选的候选（{'、'.join(allowed)}）都不通，保持 {orig}{hint}"))
+        print(c("31", f"   ✗ 能自动选的候选（{'、'.join(allowed)}）都不通，保持 {orig}{hint}"))
         return False
     if target != default and not clearly_better(scores[target], scores[orig], 50):
         target = orig  # 默认出口不可用时，当前出口与最好的差不多就不动
     api.select(line, target)
     changed = report(line, target, orig)
     if target != default:
-        print(c("33", f"  {line} 的默认出口 {default} 不可用，暂时钉在 {target}；恢复后再执行一次 `netsel tune`"))
+        warn(f"默认出口 {default} 不可用，暂时钉在 {target}；恢复后再执行一次 `netsel tune {line}`")
     return changed
 
 
@@ -484,25 +651,24 @@ def tune_ssh(api, line, rounds=3):
     host = SSH_LINES[line]
     cfg = ssh_config(host)
     if cfg is None:
-        print(c("2", f"  {line} 跳过：~/.ssh/config 里没有 {host}（本机没 include 对应 home entity 的 provides.ssh）"))
+        print(c("2", f" · {line} 跳过：~/.ssh/config 里没有 {host}（本机没 include 对应 home entity 的 provides.ssh）"))
         return False
     if "ssh-direct" in cfg.get("proxycommand", ""):
-        print(c("2", f"  {line} 跳过：{host} 经 ssh-direct 直连，不经过 Clash"))
+        print(c("2", f" · {line} 跳过：{host} 经 ssh-direct 直连，不经过 Clash"))
         return False
     g = api.proxies()[line]
     cands, orig = g["all"], g["now"]
     with cf.ThreadPoolExecutor() as ex:
         alive = dict(zip(cands, ex.map(
             lambda x: x == "DIRECT" or bool(api.delay(x, TEST_URL, timeout_ms=3000)), cands)))
-    print(c("2", f"    实测 ssh {host} 登录（每个出口 {rounds} 次）"))
-    scores = {}
+    scores, cells = {}, {}
     try:
         for cand in cands:
-            mark = "●" if cand == orig else " "
             if not alive[cand]:
                 scores[cand] = (rounds, float("inf"))
-                print(f"    {mark} {pad(cand, 12)} {c('31', '代理不通，跳过')}")
+                cells[cand] = c("31", "代理不通")
                 continue
+            progress(True, f"ssh {host} 经 {cand} 登录")
             api.select(line, cand)
             times = []
             for _ in range(rounds):
@@ -510,18 +676,19 @@ def tune_ssh(api, line, rounds=3):
                 if times.count(None) >= 2:  # 已经不可能胜出
                     break
             scores[cand] = score(times, rounds)
-            leaf = " → ".join(short(x) for x in chain(api.proxies(), cand)[1:])
-            print(f"    {mark} {pad(cand, 12)} {pad(fmt_score(scores[cand], rounds, 3000), 16)} {c('2', leaf)}")
+            cells[cand] = fmt_score(scores[cand], rounds, 3000)
+        progress(False)
     except BaseException:
+        progress(False)
         api.select(line, orig)  # 中途 Ctrl-C / 出错时别把分组留在某个试探中的候选上
         raise
     best = min(cands, key=scores.get)
-    if scores[best][0] >= rounds:
-        api.select(line, orig)
-        print(c("31", f"  {line} 所有出口都登录失败，保持 {orig}"))
-        return False
-    target = best if clearly_better(scores[best], scores[orig], 300) else orig
+    target = orig if scores[best][0] >= rounds else best if clearly_better(scores[best], scores[orig], 300) else orig
     api.select(line, target)
+    tune_box(api, line, f"ssh {host} 登录 ×{rounds}", cands, orig, cells)
+    if scores[best][0] >= rounds:
+        print(c("31", f"   ✗ 所有出口都登录失败，保持 {orig}"))
+        return False
     return report(line, target, orig)
 
 
@@ -533,15 +700,14 @@ def cmd_tune(api, lines=None):
             die(f"没有分流线 {line}；可选：{', '.join(LINES)}")
         if line not in proxies:
             die(f"没有分组 {line}，先执行 `netsel setup`")
-    retest_groups(api, subs(proxies))  # 先让各自动组按最新测速重选，再比较候选
+    retest_groups(api, proxies)  # 先让各自动组按最新测速重选，再比较候选
     # HTTP 线在前：ssh 线的候选里有「国外」「AI 美国」，要等它们先调好
     order = [x for x in HTTP_LINES if x in lines] + [x for x in SSH_LINES if x in lines]
     changed = False
     for line in order:
-        print(c("1", line))
         changed |= (tune_http if line in HTTP_LINES else tune_ssh)(api, line)
     if changed:
-        print(c("2", "已建立的连接（如 Rex 隧道）仍走旧出口，断开重连后才换。"))
+        print(c("2", " 已建立的连接（如 Rex 隧道）仍走旧出口，断开重连后才换。"))
 
 
 def update_provider(api, name):
@@ -562,9 +728,10 @@ def cmd_update(api):
     结束时切回原来的路线，日常的定时更新仍然直连。"""
     proxies = api.proxies()
     names = subs(proxies)
+    w = max(width(n) for n in names)
     route = proxies.get(ROUTE)
     if route is None:  # 旧脚本没有这个组：只能按 mihomo 默认的路线拉一次
-        print(c("33", f"当前配置没有「{ROUTE}」组，失败时无法换路线重试；执行 `netsel setup` 更新分流脚本。"))
+        warn(f"当前配置没有「{ROUTE}」组，失败时无法换路线重试；执行 `netsel setup` 更新分流脚本。")
     routes = route["all"] if route else [None]
     orig = route["now"] if route else None
     pending, errors = list(names), {}
@@ -577,21 +744,23 @@ def cmd_update(api):
                     continue  # 这条路线本身没有可用节点
                 api.select(ROUTE, r)
             via = {"DIRECT": "直连", None: "按规则"}.get(r, f"经 {r}")
+            progress(True, f"{via}拉取订阅")
             with cf.ThreadPoolExecutor() as ex:
                 res = dict(zip(pending, ex.map(lambda n: update_provider(api, n), pending)))
+            progress(False)
             for n in list(pending):
                 if res[n] is None:
-                    print(f"  {pad(n, 8)} {c('32', 'ok')} {c('2', via)}")
+                    print(f" {OK} {pad(c('1', n), w)}  {c('2', via)}")
                     pending.remove(n)
                 else:
                     errors[n] = f"{via}：{res[n]}"
                     if r is not None and r != routes[-1]:
-                        print(c("2", f"  {pad(n, 8)} {via}失败（{res[n]}），换路线重试 …"))
+                        print(c("2", f" · {pad(n, w)}  {via}失败（{res[n]}），换路线重试"))
     finally:
         if route is not None:
             api.select(ROUTE, orig)
     for n in pending:
-        print(f"  {pad(n, 8)} {c('31', '失败')} {errors[n]}")
+        print(f" {BAD} {pad(c('1', n), w)}  {c('31', errors[n])}")
     return not pending
 
 
@@ -639,7 +808,7 @@ def render_script(subs):
     # 按 URL 认订阅：Verge 给订阅起的名字（如 jms-1265282.yaml）不可控。
     summary = next(s for s in subs if s["summary"])
     managed_name = next((it.get("name") for it in verge_remotes() if it.get("url") == summary["url"]), None)
-    found = [{k: s[k] for k in ("name", "key", "url")} for s in subs]
+    found = [{k: s[k] for k in ("name", "key", "url", "ai")} for s in subs]
     with open(TEMPLATE) as f:
         return (f.read()
                 .replace("__SUBS__", json.dumps(found, ensure_ascii=False, indent=2))
