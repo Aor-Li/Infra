@@ -78,6 +78,19 @@ in
         sops.age.keyFile = lib.mkDefault "${config.home.homeDirectory}/.config/sops/age/keys.txt";
 
         sops.defaultSopsFile = lib.mkIf (builtins.pathExists sopsFile) sopsFile;
+
+        # 上游 darwin 激活步骤是无序字符串，可能排在 setupLaunchAgents 之前：
+        # plist 尚未链接到 ~/Library/LaunchAgents 时 bootstrap 报 "5: Input/output error"。
+        # 改为排在其后，并用 kickstart -k 重跑已加载的 agent（新装的已由 setupLaunchAgents 启动）。
+        home.activation.sops-nix =
+          lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && (config.launchd.agents.sops-nix.enable or false))
+            (
+              lib.mkForce (
+                lib.hm.dag.entryAfter [ "setupLaunchAgents" ] ''
+                  run /bin/launchctl kickstart -k "gui/$(id -u)/org.nix-community.home.sops-nix"
+                ''
+              )
+            );
       };
   };
 }
