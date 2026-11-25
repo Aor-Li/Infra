@@ -363,8 +363,8 @@ host 的值传给 standalone home，硬造一层只会让"这个值到底从哪�
 ## 8. devenvs：项目级开发环境
 
 `devenvs/` 是 devenv 的内容，**不属于 den 的 aspect 树**，也不被 import-tree 导入（`modules/` 之外）。
-术语（Global / Modular / Project Dev Env、分析模式 / 构建模式）见 `GLOSSARY.md`；锁定与工具链的
-取舍见 `docs/adr/0001-devenvs-locking-and-toolchain.md`；操作步骤见 `devenvs/README.md`。
+新增、修改或绑定开发环境时，先读 `devenvs/README.md`（概念、锁定规则与操作步骤）；
+调整锁定或工具链来源时，再读 `devenvs/docs/adr/0001-devenvs-locking-and-toolchain.md`。
 
 ```
 devenvs/

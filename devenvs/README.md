@@ -1,11 +1,39 @@
 # devenvs
 
-项目级开发环境（devenv）。术语见仓库根的 `GLOSSARY.md`，取舍见 `docs/adr/0001-devenvs-locking-and-toolchain.md`。
+项目级开发环境（devenv）。锁定与工具链的取舍见
+[对应 ADR](docs/adr/0001-devenvs-locking-and-toolchain.md)。
+
+## 概念与边界
+
+**Global Dev Env**：home 层常驻的开发工具集合，不随目录变化；语言工具由
+[`trait/dev/lang/`](../modules/aspects/trait/dev/lang/) 管理。统一使用此名称，避免含义更宽的“全局环境”或“home 环境”。
+与 Project Dev Env 独立配置；项目环境激活后覆盖 `CC` / `CXX` / `CLANGD_FLAGS` 等变量，
+Global 一侧不需要知道项目环境的存在。
+
+**Modular Dev Env**：通用、可参数化的开发环境单元，如 cpp / cuda / python；由 Project Dev Env
+组合使用，自身不作为目录绑定的激活入口。统一使用此名称，避免 Env Module、语言环境、devenv 模块。
+
+**Project Dev Env**：绑定一个具体代码仓的开发环境，由若干 Modular Dev Env 与该仓特有配置组成，
+是绑定到目录上激活的单元。版本固定方式见[锁定](#锁定)。统一使用此名称，避免 Project Env、项目 devenv、代码仓环境。
+
+**插件（Plugin）**：本文专指 Modular Dev Env 上可选的附加工具组，如 cpp 的 ccache、cuda 的 nccl，
+以开关或列表声明；统一称插件，避免扩展、addon。
+
+**分析模式（Analysis Mode）**：Project Dev Env 对特定工具链提供代码分析能力的状态，包括 LSP
+所需的头文件、编译参数与类型信息，该工具链的构建与测试不在此模式的支持范围内。避免称为阅读模式、只读模式。
+
+**构建模式（Build Mode）**：Project Dev Env 对特定工具链提供编译与测试能力的状态。避免称为完整模式。
+
+模式由模块根据平台条件给出，Project Dev Env 消费模块提供的事实。例如 `aor.env.cuda.buildable`
+描述 CUDA 工具链的构建能力；macOS 上 CUDA 项目进入分析模式，不代表该平台上的 C++ 或 Python 项目都只能分析。
+
+## 目录结构
 
 ```
 devenvs/
 ├── modules/     Modular Dev Env：cpp / cuda / python / cutlass，选项在 aor.env.<name>
-└── projects/    Project Dev Env：一个代码仓一个目录，版本全部锁定
+├── projects/    Project Dev Env：一个代码仓一个目录
+└── docs/adr/    开发环境的决策记录
 ```
 
 cutlass 既是模块也是项目：`modules/cutlass` 给 kernel 项目提供锁定版本的头文件路径与 CuTe DSL 的 editable
