@@ -7,6 +7,7 @@
 {
   den.aspects.Enten = {
     includes = [
+      den.aspects.network.vpn.tailscale
       den.aspects.desktop
       den.aspects.app
       den.aspects.dev.editor.vscode

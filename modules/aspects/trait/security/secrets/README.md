@@ -46,7 +46,8 @@ sops.secrets.anthropic_auth_token = { };
   `entity/users/aor/secrets.yaml` 保留 Clash 订阅清单；hosts 下还没有 secrets.yaml。
 - [`dev/ai/claude.nix`](../../dev/ai/claude.nix) 的 provider 认证（`ANTHROPIC_AUTH_TOKEN`）
   待接 sops。
-- [`network/tailscale.nix`](../../network/tailscale.nix) 待用 `authKeyFile` 免交互入网。
+- [`network/vpn/tailscale.nix`](../../network/vpn/tailscale.nix) 首次入网使用实机交互登录；
+  若以后需要无人值守注册，再通过 sops 提供 `authKeyFile`。
 - [`.sops.yaml`](.sops.yaml) 中系统级规则暂用 aor 个人 key，待各主机生成 age key 后按主机拆分。
 - 原 Nix settings 配置曾用 sops 模板注入 `github_access_token` 到 `nix.conf`（迁移时移除），
   需要时可接回。

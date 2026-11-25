@@ -1,6 +1,5 @@
 // Clash Verge 全局扩展脚本模板（由 netsel setup 生成，勿手改）。`netsel setup` 把下面 SUBS 的占位符替换成
-// sops 订阅清单里的 [{ name, key, url }]（见 clash.nix），ALICLOUD 的占位符替换成 `ssh -G AliCloud` 解析出的
-// 地址（同样来自 sops，仓库里没有明文），写到 Verge 的 profiles/Script.js。全局脚本仅在
+// sops 订阅清单里的 [{ name, key, url }]（见 clash.nix），写到 Verge 的 profiles/Script.js。全局脚本仅在
 // 汇总订阅上改写配置；选择其他订阅时保持它们的原生节点和分组。
 // 订阅链接含 token，仓库里只有密文，明文只出现在生成后的文件里。
 // 占位符只能在代码里出现一次：替换是纯文本的，写进注释会把多行 JSON 漏到注释外面，脚本语法错误后
@@ -8,9 +7,9 @@
 //
 // 选择汇总订阅时，丢掉它自带的节点 / 分组 / 规则，改用 proxy-providers 同时拉取
 // 所有订阅，再按下面几条线分流：
-//   TurboAI   TurboAI 集群（ssh 网关在阿里云加速器后面），默认直连
-//   AliCloud  同事开的阿里云美国机器（按 IP 匹配）。国内直连美国质量不稳，单独一条线，
-//             由 `netsel tune` 按 ssh 登录实测挑出口；mihomo 的测速只会发 HTTP，测不了 ssh
+//   TurboAI   TurboAI 集群的域名，默认直连；`netsel tune` 实测 philoai.xyz，国外明显快过直连才走国外。
+//             ssh 网关经 ssh-direct 绕开 Clash，不受这条线影响；不在加速节点后面的主机
+//             （gitlab，见 TURBOAI_VIA_PROXY）单独走国外线
 //   国内   GEOSITE cn / GEOIP CN，默认直连
 //   国外   其余流量；默认「自动容灾」：按订阅顺序取第一个可用订阅里延迟最低的节点
 //   AI    Claude / OpenAI 等不对香港开放的服务，四档逐级回落：美国 → 备用 → 非亚洲 → 其余允许地区；
@@ -25,9 +24,11 @@
 const SUBS = __SUBS__;
 const NETSEL_PROFILE = __NETSEL_PROFILE__;
 
-const ALICLOUD = __ALICLOUD__;
-
 const TURBOAI_DOMAINS = ["philoai.xyz", "vegalb.com"];
+// TurboAI 域名里不在国内加速节点后面的主机，改走国外线。ssh 网关与 philoai.xyz 解析到加速节点
+// （ga-*.tencentcloudga003.cn），直连就快；gitlab 解析到 GCP 新加坡的裸 IP，直连跨境实测 15–30 KiB/s
+// （git submodule update 拉十几分钟像卡死），经国外线 3MB/s。DOMAIN 规则排在 TURBOAI_DOMAINS 前面才能先命中
+const TURBOAI_VIA_PROXY = ["gitlab.philoai.xyz"];
 // AI 服务的静态下载 CDN（ChatGPT / Codex 安装包等，几百 MB）。GEOSITE category-ai-!cn 会把它们分到 AI 线，
 // 而 AI 线按延迟选中的美国专线带宽极小（实测 0.2MB/s，brew 装 chatgpt 时下到一半断流）。
 // 这些 CDN 不按地区拦截（经澳门节点实测 200、14MB/s），改走国外线
@@ -106,12 +107,6 @@ function main(config, profileName) {
 
   const groups = [
     { name: "TurboAI", type: "select", proxies: ["DIRECT", "国外"] },
-    // 国外在前：没调过时与以前一样（以前它落在 MATCH,国外）。AI 美国是离机器最近的一档节点
-    {
-      name: "AliCloud",
-      type: "select",
-      proxies: ["国外", "DIRECT", ...(regionKeys.length ? ["AI 美国"] : []), ...names],
-    },
     { name: "国内", type: "select", proxies: ["DIRECT", "国外"] },
     { name: "国外", type: "select", proxies: ["自动容灾", ...names] },
     // AI 备用单列出来，供 `netsel tune` 在 AI 自动不可用时钉住
@@ -138,10 +133,12 @@ function main(config, profileName) {
     /^[0-9.]+$/.test(h) ? `IP-CIDR,${h}/32,${target},no-resolve` : `DOMAIN,${h},${target}`;
   const subHosts = SUBS.map((s) => s.url.replace(/^[a-z]+:\/\//i, "").split(/[/?#:]/)[0]);
   const rules = [
+    ...TURBOAI_VIA_PROXY.map((h) => `DOMAIN,${h},国外`),
     ...TURBOAI_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},TurboAI`),
-    ...ALICLOUD.map((h) => hostRule(h, "AliCloud")),
     // 经 Clash 访问订阅地址时（如 Verge 自己更新订阅）走这条；mihomo 拉 provider 走 ROUTE 组，不看规则
     ...subHosts.map((h) => hostRule(h, "DIRECT")),
+    "DOMAIN-SUFFIX,ts.net,DIRECT",
+    "IP-CIDR6,fd7a:115c:a1e0::/48,DIRECT,no-resolve",
     "GEOSITE,private,DIRECT",
     "GEOIP,private,DIRECT,no-resolve",
     "IP-CIDR,100.64.0.0/10,DIRECT,no-resolve", // tailscale
@@ -165,9 +162,12 @@ function main(config, profileName) {
     "default-nameserver": ["223.5.5.5", "119.29.29.29"],
     nameserver: domestic,
     "proxy-server-nameserver": domestic,
+    // MagicDNS 只能由本机 Tailscale DNS 回答，不能送去公共 DoH。
+    "nameserver-policy": { ...((config.dns || {})["nameserver-policy"] || {}), "+.ts.net": "100.100.100.100" },
     "fake-ip-filter": [
       ...new Set([
         ...((config.dns || {})["fake-ip-filter"] || ["+.lan", "+.local"]),
+        "+.ts.net",
         ...TURBOAI_DOMAINS.map((d) => `+.${d}`),
         ...subHosts,
       ]),
@@ -182,6 +182,15 @@ function main(config, profileName) {
     "rule-providers": {},
     rules,
     dns,
+    // Tailscale 自己的 VPN 路由承载 overlay，避免被 Clash TUN 再次捕获。
+    tun: {
+      ...(config.tun || {}),
+      "route-exclude-address": [...new Set([
+        ...((config.tun || {})["route-exclude-address"] || []),
+        "100.64.0.0/10",
+        "fd7a:115c:a1e0::/48",
+      ])],
+    },
     profile: { ...(config.profile || {}), "store-selected": true },
     "geodata-mode": true,
     "geox-url": {

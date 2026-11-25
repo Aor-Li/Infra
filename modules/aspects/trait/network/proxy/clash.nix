@@ -1,4 +1,4 @@
-# 关掉它你会失去：Clash Verge 代理客户端，以及按 TurboAI / AliCloud / 国内 / 国外 / AI 分流、在终端里看状态和切节点的 `netsel`。
+# 关掉它你会失去：Clash Verge 代理客户端，以及按 TurboAI / 国内 / 国外 / AI 分流、在终端里看状态和切节点的 `netsel`。
 #
 # 订阅清单（有哪些订阅、顺序、哪份是汇总订阅）是所有机器共享的事实，放在 sops：
 # entity/users/aor/secrets.yaml 的 clash.subscriptions，一个 YAML 列表字符串
@@ -13,7 +13,7 @@
 #
 # Clash Verge 一次只激活一份订阅。全局扩展脚本只在汇总订阅激活时启用 netsel 分流；
 # 选其他订阅时保留其原生节点和分组，供现有节点故障时救急。clash-script.js 用
-# proxy-providers 同时拉取清单里的所有订阅，再按 TurboAI / AliCloud / 国内 / 国外 / AI 分组。
+# proxy-providers 同时拉取清单里的所有订阅，再按 TurboAI / 国内 / 国外 / AI 分组。
 # `netsel setup` 把清单套进模板写到 Verge 的 profiles/Script.js；清单里有、Verge 里还没有的
 # 订阅经 clash://install-config deep link 交给 Verge 导入（profiles.yaml 归 Verge 写，这里不碰）。
 #
@@ -22,7 +22,7 @@
 # 新机器第一次 switch 后，打开一次 Clash Verge，再执行一次 `netsel setup`。
 #
 # Verge 自己的配置（clash-verge.yaml / verge.yaml）只收敛 netsel 依赖的几项：开启外部控制器、
-# 只听 127.0.0.1。控制器 secret 不管，用 Verge 当时的值（理由见 netsel.py 的 CONTROLLER 处）。
+# 控制器地址不为空时沿用；追加 Tailscale 系统代理绕过项。控制器 secret 用 Verge 当时的值。
 {
   den.aspects.network.proxy.clash = {
     darwin = {

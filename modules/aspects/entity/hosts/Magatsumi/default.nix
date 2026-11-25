@@ -3,6 +3,7 @@
 { den, ... }:
 {
   den.aspects.Magatsumi.includes = [
+    den.aspects.network.vpn.tailscale
     den.aspects.desktop.session.compositor.aerospace
     den.aspects.app
     den.aspects.desktop.input.karabiner

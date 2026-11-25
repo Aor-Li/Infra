@@ -3,6 +3,7 @@
 { den, ... }:
 {
   den.aspects.Kumeyuri.includes = [
+    den.aspects.network.vpn.tailscale
     den.aspects.desktop.session.compositor.aerospace
     den.aspects.app
     den.aspects.desktop.input.karabiner

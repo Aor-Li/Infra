@@ -8,7 +8,8 @@
                              国内 / 国外 / AI  逐个候选实测该线的目标站；默认的自动组可用就用它，
                                                不可用时钉到实测最好的候选（AI 只会在 AI 自动与
                                                AI 备用之间选，其余候选可能从香港出去，不自动选）
-                             TurboAI / AliCloud  逐个候选实测 ssh 登录耗时（mihomo 只会测 HTTP）
+                             TurboAI           实测 philoai.xyz，国外明显快过直连才走国外，否则直连
+                                               （ssh 网关经 ssh-direct 绕开 Clash，不受这条线影响）
     netsel update          重新拉取所有订阅；直连拉不下来的，依次借各订阅的节点重试
     netsel setup           把 Clash Verge 收敛到仓库的配置：导入清单里缺的订阅、分流脚本、
                            外部控制器；有差异且 Verge 在运行时会重启它（断网几秒）
@@ -53,18 +54,25 @@ AI_TIMEOUT = 5000  # 毫秒，见 retest_groups
 AI_TRACE = "https://claude.ai/cdn-cgi/trace"
 AI_BLOCKED_LOC = {"HK", "MO", "CN", "RU"}  # 与 clash-script.js 的 AI_BLOCKED 一致
 ROUTE = "订阅更新"  # mihomo 拉订阅走的组，见 clash-script.js
-LINES = ["TurboAI", "AliCloud", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
-# 按 HTTP 实测连通性的分流线 → (目标 URL, 期望状态码)
+LINES = ["TurboAI", "国内", "国外", "AI"]  # 分流线，顺序即展示顺序
+# 按 HTTP 实测连通性的分流线 → (目标 URL, 期望状态码)。顺序即 tune 的顺序：TurboAI 的候选里有
+# 「国外」，要等它先调好。philoai.xyz 未登录时 302 到飞书登录页，不限状态码
 HTTP_LINES = {
     "国内": ("https://www.baidu.com", None),
     "国外": (TEST_URL, None),
     "AI": (AI_TEST, AI_EXPECT),
+    "TurboAI": ("https://philoai.xyz", None),
 }
+# tune 按实测速度选的线：别的候选明显快过默认候选才用别的，差不多就回到默认。其余线的默认候选
+# 是自动组（或国内的 DIRECT），通就用它；TurboAI 的默认 DIRECT 不会容灾，直连跨境慢时也「通」
+# （gitlab 实测 15–30 KiB/s），只看通不通会一直停在直连
+BY_SPEED = {"TurboAI"}
 # tune 只会自动切到这些候选（不在表里的线不限）。AI 备用是清单里标了 ai: true 的订阅，出口实测过；
 # AI 的其余候选（国外、各订阅）可能从香港出去，测速又分辨不了地区，只能由你用 `netsel pick AI` 手动选
 TUNE_ONLY = {"AI": ["AI 自动", "AI 备用"]}
-# 按 ssh 登录实测连通性的分流线 → 测哪个 ssh 别名（来自对应 home entity 的 provides.ssh，经 SOPS 解密）
-SSH_LINES = {"TurboAI": "TurboAI-gw", "AliCloud": "AliCloud"}
+# 总览里另测 ssh 登录的分流线 → ssh 别名（来自对应 home entity 的 provides.ssh，经 SOPS 解密）。
+# 只展示不调：TurboAI-gw 经 ssh-direct 绕开 Clash，出口选什么都影响不到它
+GATEWAY_SSH = {"TurboAI": "TurboAI-gw"}
 SSH = "/usr/bin/ssh"  # activation 的 PATH 里没有 ssh
 
 TTY = sys.stdout.isatty()
@@ -374,11 +382,11 @@ def cmd_status(api, retest=True):
         retest_groups(api, proxies)
         proxies = api.proxies()
 
-    # 连通性：分流线逐条实测（经 mihomo 的出口），SSH_LINES 另测真实 ssh 登录，AI 另查真实出口地区
+    # 连通性：分流线逐条实测（经 mihomo 的出口），GATEWAY_SSH 另测真实 ssh 登录，AI 另查真实出口地区
     progress(True, "实测各分流线")
     with cf.ThreadPoolExecutor() as ex:
         futs = {k: ex.submit(api.delay, k, u, e) for k, (u, e) in HTTP_LINES.items()}
-        ssh_futs = {k: ex.submit(probe_ssh, h) for k, h in SSH_LINES.items()}
+        ssh_futs = {k: ex.submit(probe_ssh, h) for k, h in GATEWAY_SSH.items()}
         loc_fut = ex.submit(api.ai_exit)
         reach = {k: f.result() for k, f in futs.items()}
         ssh_res = {k: f.result() for k, f in ssh_futs.items()}
@@ -386,18 +394,17 @@ def cmd_status(api, retest=True):
     progress(False)
 
     maxw = term_width() - 4
-    rows, broken = [], []
+    rows, broken, gw_down = [], [], []
     for line in LINES:
-        if line in SSH_LINES:
-            ok, via, ms = ssh_res[line]
-            target = f"ssh {SSH_LINES[line]}"
-            val = c("2", "未配置") if ok is None else fmt_delay(ms, 3000, 6000, "失败")
-            extra = c("2", via)
-        else:
-            ms = reach[line]
-            ok = bool(ms)
-            target = re.sub(r"^(www|api)\.", "", HTTP_LINES[line][0].split("/")[2])
-            val, extra = fmt_delay(ms), ""
+        ms = reach[line]
+        ok = bool(ms)
+        target = re.sub(r"^(www|api)\.", "", HTTP_LINES[line][0].split("/")[2])
+        val, extra = fmt_delay(ms), ""
+        if line in GATEWAY_SSH and ssh_res[line][0] is not None:
+            gw_ok, via, gw_ms = ssh_res[line]
+            extra = c("2", f"ssh {GATEWAY_SSH[line]}（{via}）") + " " + fmt_delay(gw_ms, 3000, 6000, "失败")
+            if not gw_ok:
+                gw_down.append(f"ssh {GATEWAY_SSH[line]}（{via}）")
         if line == "AI":
             extra = c("31" if loc in AI_BLOCKED_LOC else "2", f"出口 {loc or '?'}")
             ok = ok and loc not in AI_BLOCKED_LOC
@@ -434,6 +441,8 @@ def cmd_status(api, retest=True):
         warn(f"AI 线从 {loc} 出口，Claude / OpenAI 会拒绝 → `netsel tune AI`")
     if broken:
         warn(f"{'、'.join(broken)} 不通 → `netsel fix`（更新订阅并重新调出口）")
+    if gw_down:
+        warn(f"{'、'.join(gw_down)} 登录失败；ssh-direct 不经过 Clash，调出口修不了")
     box("订阅", sub_box, inner)
 
 
@@ -513,12 +522,6 @@ def probe_ssh(host):
     via = "ssh-direct" if "ssh-direct" in cfg.get("proxycommand", "") else "经 Clash"
     ms = ssh_login(host)
     return bool(ms), via, ms
-
-
-def alicloud_hosts():
-    """AliCloud 线按地址匹配；地址在 sops 解密出的 ssh 条目里，不进仓库。没配置时为空（不加规则）。"""
-    cfg = ssh_config(SSH_LINES["AliCloud"])
-    return [cfg["hostname"]] if cfg else []
 
 
 def fzf(lines, prompt):
@@ -609,7 +612,8 @@ def report(line, target, orig):
 def tune_http(api, line, rounds=3):
     """候选都是 mihomo 的组或 DIRECT，直接对候选测延迟，不用切换分组。
     默认候选（排第一的自动组 / DIRECT）稳定可用就用它：自动组自己会在节点间容灾，
-    钉在某个订阅上反而没了容灾。它不可用时才钉到实测最好的候选。"""
+    钉在某个订阅上反而没了容灾。它不可用时才钉到实测最好的候选。
+    BY_SPEED 里的线默认候选「通」还不够：别的候选明显快过它就用别的，否则用它。"""
     url, expected = HTTP_LINES[line]
     g = api.proxies()[line]
     cands, orig = g["all"], g["now"]
@@ -628,68 +632,22 @@ def tune_http(api, line, rounds=3):
     default = cands[0]
     allowed = [x for x in cands if x == orig or x in TUNE_ONLY.get(line, cands)]
     best = min(allowed, key=scores.get)
-    if scores[default][0] == 0:
-        target = default
-    elif scores[best][0] < rounds:
-        target = best
-    else:
+    if scores[best][0] >= rounds:
         hint = "；可以用 `netsel pick` 手动选" if line in TUNE_ONLY else ""
         print(c("31", f"   ✗ 能自动选的候选（{'、'.join(allowed)}）都不通，保持 {orig}{hint}"))
         return False
-    if target != default and not clearly_better(scores[target], scores[orig], 50):
-        target = orig  # 默认出口不可用时，当前出口与最好的差不多就不动
+    pinned = line not in BY_SPEED and scores[default][0] != 0
+    if line in BY_SPEED:  # 和默认的差不多就回到默认：直连不耗代理流量
+        target = best if clearly_better(scores[best], scores[default], 50) else default
+    elif not pinned:
+        target = default
+    else:  # 差不多时不动，免得掐断走在当前出口上的长连接
+        target = best if clearly_better(scores[best], scores[orig], 50) else orig
     api.select(line, target)
     changed = report(line, target, orig)
-    if target != default:
+    if pinned and target != default:
         warn(f"默认出口 {default} 不可用，暂时钉在 {target}；恢复后再执行一次 `netsel tune {line}`")
     return changed
-
-
-def tune_ssh(api, line, rounds=3):
-    """mihomo 的测速只发 HTTP，测不了 ssh，所以这里自己测：把分组依次切到每个候选，各登录
-    rounds 次。代理本身不通的候选先筛掉（DIRECT 在国内测不了 gstatic，不筛），省掉 ssh 超时。"""
-    host = SSH_LINES[line]
-    cfg = ssh_config(host)
-    if cfg is None:
-        print(c("2", f" · {line} 跳过：~/.ssh/config 里没有 {host}（本机没 include 对应 home entity 的 provides.ssh）"))
-        return False
-    if "ssh-direct" in cfg.get("proxycommand", ""):
-        print(c("2", f" · {line} 跳过：{host} 经 ssh-direct 直连，不经过 Clash"))
-        return False
-    g = api.proxies()[line]
-    cands, orig = g["all"], g["now"]
-    with cf.ThreadPoolExecutor() as ex:
-        alive = dict(zip(cands, ex.map(
-            lambda x: x == "DIRECT" or bool(api.delay(x, TEST_URL, timeout_ms=3000)), cands)))
-    scores, cells = {}, {}
-    try:
-        for cand in cands:
-            if not alive[cand]:
-                scores[cand] = (rounds, float("inf"))
-                cells[cand] = c("31", "代理不通")
-                continue
-            progress(True, f"ssh {host} 经 {cand} 登录")
-            api.select(line, cand)
-            times = []
-            for _ in range(rounds):
-                times.append(ssh_login(host))
-                if times.count(None) >= 2:  # 已经不可能胜出
-                    break
-            scores[cand] = score(times, rounds)
-            cells[cand] = fmt_score(scores[cand], rounds, 3000)
-        progress(False)
-    except BaseException:
-        progress(False)
-        api.select(line, orig)  # 中途 Ctrl-C / 出错时别把分组留在某个试探中的候选上
-        raise
-    best = min(cands, key=scores.get)
-    target = orig if scores[best][0] >= rounds else best if clearly_better(scores[best], scores[orig], 300) else orig
-    api.select(line, target)
-    tune_box(api, line, f"ssh {host} 登录 ×{rounds}", cands, orig, cells)
-    if scores[best][0] >= rounds:
-        print(c("31", f"   ✗ 所有出口都登录失败，保持 {orig}"))
-        return False
-    return report(line, target, orig)
 
 
 def cmd_tune(api, lines=None):
@@ -701,11 +659,9 @@ def cmd_tune(api, lines=None):
         if line not in proxies:
             die(f"没有分组 {line}，先执行 `netsel setup`")
     retest_groups(api, proxies)  # 先让各自动组按最新测速重选，再比较候选
-    # HTTP 线在前：ssh 线的候选里有「国外」「AI 美国」，要等它们先调好
-    order = [x for x in HTTP_LINES if x in lines] + [x for x in SSH_LINES if x in lines]
     changed = False
-    for line in order:
-        changed |= (tune_http if line in HTTP_LINES else tune_ssh)(api, line)
+    for line in [x for x in HTTP_LINES if x in lines]:  # 按 HTTP_LINES 的顺序，见那里的注释
+        changed |= tune_http(api, line)
     if changed:
         print(c("2", " 已建立的连接（如 Rex 隧道）仍走旧出口，断开重连后才换。"))
 
@@ -812,7 +768,6 @@ def render_script(subs):
     with open(TEMPLATE) as f:
         return (f.read()
                 .replace("__SUBS__", json.dumps(found, ensure_ascii=False, indent=2))
-                .replace("__ALICLOUD__", json.dumps(alicloud_hosts()))
                 .replace("__NETSEL_PROFILE__", json.dumps(managed_name, ensure_ascii=False)))
 
 
@@ -907,10 +862,16 @@ def plan_setup(subs):
 
     def verge(d):
         d["enable_external_controller"] = True
+        # 保留 GUI 的自定义绕过项；Tailscale 由系统 VPN 直接承载，不进 HTTP 代理。
+        bypass = [s.strip() for s in re.split(r"[;,]", d.get("system_proxy_bypass") or "") if s.strip()]
+        for entry in ("100.64.0.0/10", "fd7a:115c:a1e0::/48", "*.ts.net"):
+            if entry not in bypass:
+                bypass.append(entry)
+        d["system_proxy_bypass"] = ",".join(bypass)  # macOS 使用逗号分隔
 
     for name, fn, what in [
         ("clash-verge.yaml", clash, "外部控制器地址"),
-        ("verge.yaml", verge, "开启外部控制器"),
+        ("verge.yaml", verge, "外部控制器与 Tailscale 系统代理绕过"),
     ]:
         new = converge_yaml(os.path.join(VERGE, name), fn)
         if new is not None:

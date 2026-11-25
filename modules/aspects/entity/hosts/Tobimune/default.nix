@@ -3,7 +3,10 @@
 # 硬件：AOOSTAR，Intel i9-13900H / 32G / Crucial P3 1TB NVMe。
 # 下面取自实机 `nixos-generate-config --show-hardware-config`，文件系统改用 label
 # 引用（与安装时的分区约定一致：boot / nixos / swap）。
+{ den, ... }:
 {
+  den.aspects.Tobimune.includes = [ den.aspects.network.vpn.tailscale ];
+
   den.aspects.Tobimune.nixos =
     { config, lib, ... }:
     {

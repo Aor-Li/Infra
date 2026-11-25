@@ -1,2 +1,6 @@
 # 过程文件（计划、调研、草稿），不进入代码仓
 .scratch/
+
+# Python 运行缓存
+__pycache__/
+*.py[cod]

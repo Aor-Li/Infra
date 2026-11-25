@@ -39,6 +39,12 @@ modules/
 | aor@turbo-ai | x86_64-linux | — | standalone home | Ubuntu | Rex + hwstat + AliCloud SSH |
 | aor@ali-cloud | x86_64-linux | — | standalone home | Ubuntu 24.04 | Rex |
 
+## Tailscale 私有网络
+
+五台 NixOS / Darwin 主机显式 include Tailscale；配置与登录验收步骤见
+[Tailscale 入网指南](docs/network/tailscale.md)。
+[绿联 NAS](devices/ugreen-nas/README.md) 作为外部设备记录，已完成入网和连通检查。
+
 ## 常用命令
 
 ```console
