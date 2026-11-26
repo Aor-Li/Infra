@@ -41,8 +41,9 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        substituters 里把国内镜像（sjtu / ustc / tuna）排在最前。默认开；
-        在境外的机器（如 aor@ali-cloud）上关掉——镜像每次请求要 1s 以上，只留官方缓存。
+        substituters 里把国内镜像（sjtu / ustc / tuna）排在最前；NixOS 上 nix-daemon 的
+        Go 模块下载也改走 goproxy.cn。默认开；在境外的机器（如 aor@ali-cloud）上关掉——
+        镜像每次请求要 1s 以上，只留官方缓存。
       '';
     };
 
@@ -52,6 +53,13 @@ in
         nix.package = pkgs.nix;
         nix.settings.trusted-users = [ "@wheel" ];
         nixpkgs.config.allowUnfree = true;
+
+        # buildGoModule 的依赖下载（vendorHash 那一步）从 nix-daemon 的环境里读 GOPROXY；
+        # 默认的 proxy.golang.org 在国内直连不通，没有代理的机器上源码构建的 Go 包会卡死。
+        # 输出是定长哈希，换源不改变结果。darwin 机器都跑着 Clash，暂不需要。
+        systemd.services.nix-daemon.environment = lib.mkIf settings.nix.conf.cnMirrors {
+          GOPROXY = "https://goproxy.cn,direct";
+        };
       };
 
     darwin =
