@@ -72,6 +72,34 @@ HTTP 9999 返回 307 到 `/desktop/?os=ugospro`，TCP 445 可达。
 
 - 访问地址：`http://ugreen-nas.taila9b4a0.ts.net:18080/`
 - 服务响应正常，页面显示 FreshRSS 1.31.0，处于首次安装的语言选择步骤。
-- 尚未完成数据库、管理员账号、订阅和定时抓取验收。
+- 2026-11-26 用户确认此前已完成初始化，重新登录后可进入订阅页面；定时抓取尚未验收。
 - 实际 Docker Compose、数据卷映射和抓取计划尚未读取，不以历史建议配置代替实机记录。
 - SMB 挂载不在当前需求范围内；用户选择直接使用 NAS 服务。
+
+## Mac 客户端：Unread
+
+Kumeyuri 显式 include `den.aspects.app.media.unread`，通过
+`homebrew.masApps` 声明 Mac App Store 应用 ID `1363637349`。
+未加入 app 汇总，不会自动给其他主机安装。首次获取需要当前 Apple 账户授权；
+后续在本机运行 `./scripts/bootstrap.sh Kumeyuri`，由 Homebrew bundle 管理安装。
+
+2026-11-26：安装声明求值通过，Unread 已安装；已开始添加 FreshRSS 账户。
+18080 端口提供 HTTP，使用 HTTPS 会报 TLS 错误；应使用下述 HTTP 地址。
+用户已确认完成 API 凭据设置和客户端连接；自动刷新及跨设备状态同步尚未单独验收。
+
+连接时选择 FreshRSS，服务器地址使用 `http://ugreen-nas.taila9b4a0.ts.net:18080/`。
+网页端先开启 API 访问，并在用户资料中配置 API 凭据；按照实际客户端字段填入。
+若客户端明确要求 Google Reader API 端点，使用
+`http://ugreen-nas.taila9b4a0.ts.net:18080/api/greader.php`。
+凭据只保存在客户端 / Keychain，不写入仓库。
+
+## 待办：FreshRSS 外网抓取与 mini PC 代理
+
+2026-11-26 添加 `https://news.ycombinator.com/rss` 时，FreshRSS 返回
+`cURL error 28: Connection timed out after 20001 milliseconds`。
+已确认该次抓取连接超时，尚不能据此判断 NAS 全部外网不可达。
+
+用户计划之后在家中的 Tobimune mini PC 上配置代理，当前暂缓。
+本轮未给 NAS / FreshRSS 添加代理参数，也未在 Tobimune 部署代理服务。
+本机 Tailscale 列表尚无 Tobimune，SSH 名称 `Tobimune` / `Tobimune.local`
+无法解析，实机 IP、SSH 访问与 Tailscale 入网待之后确认。

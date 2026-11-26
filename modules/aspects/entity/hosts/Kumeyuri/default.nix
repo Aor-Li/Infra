@@ -6,6 +6,7 @@
     den.aspects.network.vpn.tailscale
     den.aspects.desktop.session.compositor.aerospace
     den.aspects.app
+    den.aspects.app.media.unread
     den.aspects.desktop.input.karabiner
     den.aspects.desktop.input.mos
     den.aspects.desktop.shell.notchnook
