@@ -6,6 +6,18 @@
     dms.inputs.nixpkgs.follows = "nixpkgs";
   };
 
+  # DMS 本体由下面的 home 侧安装；系统侧只开它的控件依赖的系统服务
+  # （与上游 nixosModules.dank-material-shell 的默认一致，但不重复安装 dms 包）。
+  den.aspects.desktop.shell.quickshell.dank.nixos =
+    { lib, ... }:
+    {
+      services.power-profiles-daemon.enable = lib.mkDefault true; # 电源模式切换
+      services.accounts-daemon.enable = lib.mkDefault true; # 用户头像 / 显示名
+      services.geoclue2.enable = lib.mkDefault true; # 夜间模式按位置定日落
+      services.upower.enable = lib.mkDefault true; # 电池 / 外设电量
+      security.polkit.enable = lib.mkDefault true; # DMS 自带 polkit 认证弹窗
+    };
+
   den.aspects.desktop.shell.quickshell.dank.homeManager =
     { config, ... }:
     {

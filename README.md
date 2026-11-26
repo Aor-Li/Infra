@@ -35,7 +35,7 @@ modules/
 | Magatsumi | aarch64-darwin | none | laptop | darwin | aerospace + app |
 | Kumeyuri | aarch64-darwin | none | laptop | darwin | aerospace + app |
 | Kuregumo | aarch64-linux | vm | laptop | nixos | desktop + app |
-| Tobimune | x86_64-linux | none | server | nixos | （无） |
+| Tobimune | x86_64-linux | none | server | nixos | desktop + app + 音频 + 蓝牙 |
 | aor@turbo-ai | x86_64-linux | — | standalone home | Ubuntu | Rex + hwstat + AliCloud SSH |
 | aor@ali-cloud | x86_64-linux | — | standalone home | Ubuntu 24.04 | Rex |
 

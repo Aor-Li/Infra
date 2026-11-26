@@ -5,6 +5,7 @@
   den.aspects.Kuregumo = {
     includes = [
       den.aspects.network.vpn.tailscale
+      den.aspects.system.hardware.audio
       den.aspects.desktop
       den.aspects.app
       den.aspects.dev.editor.vscode
