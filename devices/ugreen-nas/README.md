@@ -93,6 +93,29 @@ Kumeyuri 显式 include `den.aspects.app.media.unread`，通过
 `http://ugreen-nas.taila9b4a0.ts.net:18080/api/greader.php`。
 凭据只保存在客户端 / Keychain，不写入仓库。
 
+## Mac 客户端试用（2026-11-26）
+
+用户决定暂时保留 Unread、NetNewsWire、ReadKit 和 Fluent Reader，逐个试用后再选择。
+四款均在 Kumeyuri 的 entity 中显式 include，各自的安装声明位于
+`modules/aspects/trait/app/media/`；NetNewsWire / Fluent Reader 使用 Homebrew cask，
+ReadKit 使用 Mac App Store（ID `1615798039`）。未加入全局 app 汇总。
+
+三款新增客户端均已安装并连接上面的 Tailscale FreshRSS 地址，分类已导入；
+验收时三款未读数均为 478，与 Unread 一致。NetNewsWire 的本地示例账户已停用，
+ReadKit 未开通付费订阅，Fluent Reader 使用 Google Reader API 并设为同步最近 1000 篇。
+这次核对确认了初始同步，未单独执行跨客户端读写状态的往返验收。
+
+订阅分组：
+
+| 分类 | 订阅源 |
+| --- | --- |
+| AI Infra | vLLM、PyTorch、Modal |
+| Nix & Build | NixOS、devenv、Tweag、Farid Zakaria’s Blog |
+| Systems | Brendan Gregg、Julia Evans |
+
+Farid 已从 `Personal Tech Blog` 移到 `Nix & Build`。订阅和文章状态由 FreshRSS 保存，
+客户端密码通过 1Password 填入；本仓库只记录安装和连接方式，不保存密码或客户端数据库。
+
 ## 待办：FreshRSS 外网抓取与 mini PC 代理
 
 2026-11-26 添加 `https://news.ycombinator.com/rss` 时，FreshRSS 返回

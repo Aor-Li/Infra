@@ -7,6 +7,9 @@
     den.aspects.desktop.session.compositor.aerospace
     den.aspects.app
     den.aspects.app.media.unread
+    den.aspects.app.media.netnewswire
+    den.aspects.app.media.fluent-reader
+    den.aspects.app.media.readkit
     den.aspects.desktop.input.karabiner
     den.aspects.desktop.input.mos
     den.aspects.desktop.shell.notchnook
