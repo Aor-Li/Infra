@@ -135,3 +135,15 @@ FreshRSS；NAS 仍为 direct。内置浏览器自动检查工具超时，需在�
 
 后续 switch 会安装新版 netsel，其他 Mac 仍需各自 switch 后执行 `netsel setup`。
 不要在 shell 中显式强制代理访问 Tailscale 地址，那会绕过系统的 bypass 判断。
+
+## Use Tailscale DNS 绕过 Clash fake-ip（2026-11-27 已修复）
+
+症状：`darwin-rebuild switch` 拉 cache.numtide.com / cache.nixos.org 报
+`SSL connect error (35) … unexpected eof`，`netsel fix` 无效；`curl -4` 正常、`curl -6` 失败。
+原因：Tailscale 的「Use Tailscale DNS」在 macOS 装了全局 resolver，查询不经 Clash，
+拿到真实 IP（含 AAAA）。TUN 只看到裸 IPv6，域名规则全落空，落到 `MATCH,国外` 的节点
+没有 IPv6 出口，TLS 被掐断。AI 等按域名的分流同样失效。
+
+修复归属 `network/proxy`：全局 Clash 脚本开启 sniffer（TLS / HTTP / QUIC，
+`override-destination`），按 SNI 还原域名，不再依赖系统 DNS 走哪条路。
+Tailscale DNS 保持开启，MagicDNS 不受影响。

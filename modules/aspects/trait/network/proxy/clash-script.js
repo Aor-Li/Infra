@@ -174,6 +174,25 @@ function main(config, profileName) {
     ],
   };
 
+  // 系统 DNS 不一定归 Clash：macOS 上 Tailscale 的「Use Tailscale DNS」会装一个全局 resolver，
+  // 查询绕过 fake-ip 直接拿真实 IP（含 AAAA）。TUN 只看到裸 IP 时，按域名的分流全部落空，
+  // IPv6 目的地址再被送进没有 IPv6 出口的节点，TLS 握手被掐断（nix-daemon 拉缓存就是这样挂的）。
+  // 嗅探 SNI / Host 还原域名并覆盖目的地址，让分流与远端解析不依赖 DNS 走了哪条路。
+  const sniffer = {
+    ...(config.sniffer || {}),
+    enable: true,
+    "parse-pure-ip": true,
+    "override-destination": true,
+    sniff: {
+      HTTP: { ports: [80, "8080-8880"] },
+      TLS: { ports: [443, 8443] },
+      QUIC: { ports: [443, 8443] },
+    },
+    "skip-domain": [
+      ...new Set([...((config.sniffer || {})["skip-domain"] || []), "+.ts.net", "+.push.apple.com"]),
+    ],
+  };
+
   return {
     ...config,
     proxies: [],
@@ -182,6 +201,7 @@ function main(config, profileName) {
     "rule-providers": {},
     rules,
     dns,
+    sniffer,
     // Tailscale 自己的 VPN 路由承载 overlay，避免被 Clash TUN 再次捕获。
     tun: {
       ...(config.tun || {}),
