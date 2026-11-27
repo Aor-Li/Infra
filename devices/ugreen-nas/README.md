@@ -76,34 +76,22 @@ HTTP 9999 返回 307 到 `/desktop/?os=ugospro`，TCP 445 可达。
 - 实际 Docker Compose、数据卷映射和抓取计划尚未读取，不以历史建议配置代替实机记录。
 - SMB 挂载不在当前需求范围内；用户选择直接使用 NAS 服务。
 
-## Mac 客户端：Unread
+## Mac 客户端：NetNewsWire
 
-Kumeyuri 显式 include `den.aspects.app.media.unread`，通过
-`homebrew.masApps` 声明 Mac App Store 应用 ID `1363637349`。
-未加入 app 汇总，不会自动给其他主机安装。首次获取需要当前 Apple 账户授权；
-后续在本机运行 `./scripts/bootstrap.sh Kumeyuri`，由 Homebrew bundle 管理安装。
+2026-11-27 用户试用后选择 NetNewsWire，卸载 Unread、ReadKit 和 Fluent Reader。
+Kumeyuri 仅显式 include `den.aspects.app.media.netnewswire`，通过 Homebrew cask
+`netnewswire` 管理安装；其他三款的安装声明和 entity 引用已移除。
+未加入全局 app 汇总，不会自动给其他主机安装。
 
-2026-11-26：安装声明求值通过，Unread 已安装；已开始添加 FreshRSS 账户。
-18080 端口提供 HTTP，使用 HTTPS 会报 TLS 错误；应使用下述 HTTP 地址。
-用户已确认完成 API 凭据设置和客户端连接；自动刷新及跨设备状态同步尚未单独验收。
+NetNewsWire 已连接 FreshRSS，初始同步核对时未读数为 478，分类已导入；
+本地示例账户已停用。服务端订阅、文章和 NetNewsWire 的连接保留。
+卸载其他客户端只移除应用，本地数据未额外清理。
 
-连接时选择 FreshRSS，服务器地址使用 `http://ugreen-nas.taila9b4a0.ts.net:18080/`。
-网页端先开启 API 访问，并在用户资料中配置 API 凭据；按照实际客户端字段填入。
-若客户端明确要求 Google Reader API 端点，使用
+连接时选择 FreshRSS，用户名使用已有账户，API URL 为
 `http://ugreen-nas.taila9b4a0.ts.net:18080/api/greader.php`。
-凭据只保存在客户端 / Keychain，不写入仓库。
-
-## Mac 客户端试用（2026-11-26）
-
-用户决定暂时保留 Unread、NetNewsWire、ReadKit 和 Fluent Reader，逐个试用后再选择。
-四款均在 Kumeyuri 的 entity 中显式 include，各自的安装声明位于
-`modules/aspects/trait/app/media/`；NetNewsWire / Fluent Reader 使用 Homebrew cask，
-ReadKit 使用 Mac App Store（ID `1615798039`）。未加入全局 app 汇总。
-
-三款新增客户端均已安装并连接上面的 Tailscale FreshRSS 地址，分类已导入；
-验收时三款未读数均为 478，与 Unread 一致。NetNewsWire 的本地示例账户已停用，
-ReadKit 未开通付费订阅，Fluent Reader 使用 Google Reader API 并设为同步最近 1000 篇。
-这次核对确认了初始同步，未单独执行跨客户端读写状态的往返验收。
+18080 端口提供 HTTP，使用 HTTPS 会报 TLS 错误。
+网页端需开启 API 访问，并在用户资料中配置 API 凭据。
+本次未单独执行跨客户端读写状态的往返验收，定时抓取仍待验收。
 
 订阅分组：
 
@@ -114,7 +102,7 @@ ReadKit 未开通付费订阅，Fluent Reader 使用 Google Reader API 并设为
 | Systems | Brendan Gregg、Julia Evans |
 
 Farid 已从 `Personal Tech Blog` 移到 `Nix & Build`。订阅和文章状态由 FreshRSS 保存，
-客户端密码通过 1Password 填入；本仓库只记录安装和连接方式，不保存密码或客户端数据库。
+连接凭据保存在客户端 / Keychain；本仓库只记录安装和连接方式，不保存密码或客户端数据库。
 
 ## 待办：FreshRSS 外网抓取与 mini PC 代理
 
